@@ -13,7 +13,6 @@
 // HTTP请求处理器声明
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
-static esp_err_t image_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
 
 // WebSocket辅助函数
@@ -37,12 +36,6 @@ httpd_handle_t web_server_start(void)
         .handler = css_handler,
         .user_ctx = NULL};
 
-    httpd_uri_t image_uri = {
-        .uri = "/lock-icon.png",
-        .method = HTTP_GET,
-        .handler = image_handler,
-        .user_ctx = NULL};
-
     httpd_uri_t ws_uri = {
         .uri = "/ws",
         .method = HTTP_GET,
@@ -54,7 +47,6 @@ httpd_handle_t web_server_start(void)
     {
         httpd_register_uri_handler(server, &index_uri);
         httpd_register_uri_handler(server, &css_uri);
-        httpd_register_uri_handler(server, &image_uri);
         httpd_register_uri_handler(server, &ws_uri);
     }
 
@@ -101,43 +93,6 @@ static esp_err_t css_handler(httpd_req_t *req)
         {
             fclose(fp);
             ESP_LOGE(TAG, "Failed to send CSS chunk");
-            return ESP_FAIL;
-        }
-    }
-
-    fclose(fp);
-    return httpd_resp_send_chunk(req, NULL, 0);
-}
-
-/**
- * 图片请求处理器 - 处理锁图标请求
- */
-static esp_err_t image_handler(httpd_req_t *req)
-{
-    struct stat st;
-    if (stat(IMAGE_PATH, &st) != 0)
-    {
-        ESP_LOGE(TAG, "Image file not found");
-        return httpd_resp_send_404(req);
-    }
-
-    FILE *fp = fopen(IMAGE_PATH, "rb");
-    if (!fp)
-    {
-        ESP_LOGE(TAG, "Failed to open image file");
-        return httpd_resp_send_500(req);
-    }
-
-    httpd_resp_set_type(req, "image/png");
-    char buffer[1024];
-    size_t bytes_read;
-
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0)
-    {
-        if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK)
-        {
-            fclose(fp);
-            ESP_LOGE(TAG, "Failed to send image chunk");
             return ESP_FAIL;
         }
     }

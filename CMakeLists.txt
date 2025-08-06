@@ -3,6 +3,8 @@
 cmake_minimum_required(VERSION 3.16)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-# "Trim" the build. Include the minimal set of components, main, and anything it depends on.
 
 project(ESP32-SmartLock-Local)
+
+# 启用SPIFFS支持
+spiffs_create_partition_image(spiffs data FLASH_IN_PROJECT)

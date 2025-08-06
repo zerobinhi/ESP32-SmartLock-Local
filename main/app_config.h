@@ -12,7 +12,6 @@ extern int lock_state; // 0: locked, 1: unlocked
 // 配置定义
 #define INDEX_HTML_PATH "/spiffs/index.html"
 #define CSS_PATH "/spiffs/style.css"
-#define IMAGE_PATH "/spiffs/lock-icon.png"
 #define AP_SSID "ESP32-SmartLock"
 #define AP_PASS "12345678"
 #define AP_CHANNEL 6

@@ -11,8 +11,6 @@
 #include "spiffs.h"
 #include "web_server.h"
 
-static const char *TAG = "SmartLock Main";
-
 void app_main(void)
 {
     // 初始化NVS
