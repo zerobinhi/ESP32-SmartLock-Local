@@ -2,12 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_http_server.h"
-#include "lwip/sockets.h"
 #include "app_config.h"
 
 // HTTP请求处理器声明
@@ -15,13 +12,13 @@ static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
 
-// WebSocket辅助函数
-static void ws_send_state(void *arg);
-
 httpd_handle_t web_server_start(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192; // 增加栈大小以处理较大的HTML文件
+    config.stack_size = 8192;     // 增加栈大小
+    config.max_open_sockets = 5;  // 增加最大连接数
+    config.recv_wait_timeout = 5; // 增加接收超时
+    config.send_wait_timeout = 5; // 增加发送超时
 
     // 注册URI处理器
     httpd_uri_t index_uri = {
@@ -48,38 +45,43 @@ httpd_handle_t web_server_start(void)
         httpd_register_uri_handler(server, &index_uri);
         httpd_register_uri_handler(server, &css_uri);
         httpd_register_uri_handler(server, &ws_uri);
+        ESP_LOGI(TAG, "Web服务器启动成功");
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Web服务器启动失败");
     }
 
     return server;
 }
 
 /**
- * HTTP GET请求处理器 - 处理主页面请求
+ * 主页面请求处理器
  */
 static esp_err_t root_handler(httpd_req_t *req)
 {
-    ESP_LOGI(TAG, "Received GET request for main page");
+    ESP_LOGI(TAG, "收到主页面请求");
     sprintf(response_data, index_html);
     httpd_resp_set_type(req, "text/html");
     return httpd_resp_send(req, response_data, HTTPD_RESP_USE_STRLEN);
 }
 
 /**
- * CSS请求处理器 - 处理样式表请求
+ * CSS样式请求处理器
  */
 static esp_err_t css_handler(httpd_req_t *req)
 {
     struct stat st;
     if (stat(CSS_PATH, &st) != 0)
     {
-        ESP_LOGE(TAG, "style.css not found in SPIFFS");
+        ESP_LOGE(TAG, "未找到style.css");
         return httpd_resp_send_404(req);
     }
 
     FILE *fp = fopen(CSS_PATH, "r");
     if (!fp)
     {
-        ESP_LOGE(TAG, "Failed to open style.css");
+        ESP_LOGE(TAG, "打开style.css失败");
         return httpd_resp_send_500(req);
     }
 
@@ -92,7 +94,7 @@ static esp_err_t css_handler(httpd_req_t *req)
         if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK)
         {
             fclose(fp);
-            ESP_LOGE(TAG, "Failed to send CSS chunk");
+            ESP_LOGE(TAG, "发送CSS数据失败");
             return ESP_FAIL;
         }
     }
@@ -102,103 +104,88 @@ static esp_err_t css_handler(httpd_req_t *req)
 }
 
 /**
- * WebSocket消息发送函数
- */
-static void ws_send_state(void *arg)
-{
-    struct async_resp_arg *resp_arg = arg;
-    if (!resp_arg)
-        return;
-
-    // 准备发送的锁状态数据
-    char buff[32];
-    snprintf(buff, sizeof(buff), "{\"lock_state\": %d}", lock_state);
-
-    httpd_ws_frame_t ws_pkt = {
-        .payload = (uint8_t *)buff,
-        .len = strlen(buff),
-        .type = HTTPD_WS_TYPE_TEXT};
-
-    // 向所有连接的WebSocket客户端发送状态
-    size_t max_clients = CONFIG_LWIP_MAX_LISTENING_TCP;
-    size_t fds = max_clients;
-    int client_fds[max_clients];
-
-    if (httpd_get_client_list(server, &fds, client_fds) == ESP_OK)
-    {
-        for (int i = 0; i < fds; i++)
-        {
-            if (httpd_ws_get_fd_info(server, client_fds[i]) == HTTPD_WS_CLIENT_WEBSOCKET)
-            {
-                httpd_ws_send_frame_async(resp_arg->hd, client_fds[i], &ws_pkt);
-            }
-        }
-    }
-
-    free(resp_arg);
-}
-
-/**
- * 触发WebSocket状态发送
- */
-esp_err_t trigger_ws_send(httpd_handle_t handle, httpd_req_t *req)
-{
-    struct async_resp_arg *resp_arg = malloc(sizeof(struct async_resp_arg));
-    if (!resp_arg)
-        return ESP_ERR_NO_MEM;
-
-    resp_arg->hd = req->handle;
-    resp_arg->fd = httpd_req_to_sockfd(req);
-    return httpd_queue_work(handle, ws_send_state, resp_arg);
-}
-
-/**
- * WebSocket请求处理器
+ * WebSocket请求处理器 - 处理按钮命令并打印提示
  */
 static esp_err_t ws_handler(httpd_req_t *req)
 {
+    // 处理握手
     if (req->method == HTTP_GET)
     {
-        ESP_LOGI(TAG, "WebSocket handshake completed");
+        ESP_LOGI(TAG, "客户端已连接WebSocket");
         return ESP_OK;
     }
 
-    httpd_ws_frame_t ws_pkt = {.type = HTTPD_WS_TYPE_TEXT};
-    uint8_t *buf = NULL;
-    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
+    // 接收WebSocket消息
+    char recv_buf[WS_RECV_BUFFER_SIZE];
+    httpd_ws_frame_t ws_pkt;
+    memset(&ws_pkt, 0, sizeof(ws_pkt));
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    ws_pkt.payload = (uint8_t *)recv_buf;
 
+    // 首先接收帧头以获取 payload 长度
+    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to receive WS frame: %d", ret);
+        // 处理连接关闭错误，不显示错误日志
+        // if (ret == ESP_ERR_HTTPD_CONN_ABORTED || ret == ESP_ERR_HTTPD_CONN_RESET)
+        // {
+        //     ESP_LOGI(TAG, "客户端已断开连接");
+        //     return ESP_OK;
+        // }
+
+        ESP_LOGE(TAG, "接收WebSocket帧头失败: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    if (ws_pkt.len)
+    // 限制最大接收长度
+    if (ws_pkt.len > WS_RECV_BUFFER_SIZE - 1)
     {
-        buf = calloc(1, ws_pkt.len + 1);
-        if (!buf)
-        {
-            return ESP_ERR_NO_MEM;
-        }
-        ws_pkt.payload = buf;
-        ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
-        if (ret == ESP_OK)
-        {
-            ESP_LOGI(TAG, "Received WS data: %s", (char *)buf);
+        ws_pkt.len = WS_RECV_BUFFER_SIZE - 1;
+    }
 
-            // 处理锁状态控制命令
-            if (strcmp((char *)buf, "unlock") == 0)
-            {
-                lock_state = 1;
-                trigger_ws_send(req->handle, req);
-            }
-            else if (strcmp((char *)buf, "lock") == 0)
-            {
-                lock_state = 0;
-                trigger_ws_send(req->handle, req);
-            }
+    // 接收实际数据
+    if (ws_pkt.len > 0)
+    {
+        ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "接收WebSocket数据失败: %s", esp_err_to_name(ret));
+            return ret;
         }
-        free(buf);
+
+        // 添加字符串终止符
+        recv_buf[ws_pkt.len] = '\0';
+        ESP_LOGI(TAG, "收到客户端命令: %s", recv_buf);
+
+        // 处理命令并打印提示
+        if (strcmp(recv_buf, "add_card") == 0)
+        {
+            ESP_LOGI(TAG, "[操作提示] 用户点击了添加卡片按钮");
+        }
+        else if (strcmp(recv_buf, "clear_cards") == 0)
+        {
+            ESP_LOGI(TAG, "[操作提示] 用户点击了清空卡片按钮");
+        }
+        else if (strcmp(recv_buf, "refresh_cards") == 0)
+        {
+            ESP_LOGI(TAG, "[操作提示] 用户点击了刷新卡片按钮");
+        }
+        else if (strcmp(recv_buf, "add_fingerprint") == 0)
+        {
+            ESP_LOGI(TAG, "[操作提示] 用户点击了添加指纹按钮");
+        }
+        else if (strcmp(recv_buf, "clear_fingerprints") == 0)
+        {
+            ESP_LOGI(TAG, "[操作提示] 用户点击了清空指纹按钮");
+        }
+        else if (strcmp(recv_buf, "refresh_fingerprints") == 0)
+        {
+            ESP_LOGI(TAG, "[操作提示] 用户点击了刷新指纹按钮");
+        }
+        else
+        {
+            ESP_LOGW(TAG, "[操作提示] 收到未知命令");
+        }
     }
 
     return ESP_OK;

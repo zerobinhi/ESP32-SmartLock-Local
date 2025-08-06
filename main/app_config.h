@@ -7,7 +7,6 @@
 // 全局变量声明
 extern httpd_handle_t server;
 extern const char *TAG;
-extern int lock_state; // 0: locked, 1: unlocked
 
 // 配置定义
 #define INDEX_HTML_PATH "/spiffs/index.html"
@@ -20,15 +19,9 @@ extern int lock_state; // 0: locked, 1: unlocked
 // 缓冲区定义
 #define INDEX_HTML_BUFFER_SIZE 32768
 #define RESPONSE_DATA_BUFFER_SIZE 32768
+#define WS_RECV_BUFFER_SIZE 128  // WebSocket接收缓冲区
 
 extern char index_html[INDEX_HTML_BUFFER_SIZE];
 extern char response_data[RESPONSE_DATA_BUFFER_SIZE];
-
-// 结构体定义
-struct async_resp_arg
-{
-    httpd_handle_t hd;
-    int fd;
-};
 
 #endif // APP_CONFIG_H

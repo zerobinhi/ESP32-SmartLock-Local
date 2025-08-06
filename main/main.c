@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -10,6 +9,8 @@
 #include "wifi.h"
 #include "spiffs.h"
 #include "web_server.h"
+
+static const char *MAIN_TAG = "SmartLock Main";
 
 void app_main(void)
 {
@@ -23,12 +24,12 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     // 初始化系统组件
-    ESP_LOGI(TAG, "Initializing system components...");
+    ESP_LOGI(MAIN_TAG, "初始化系统组件...");
     wifi_init_softap();
     spiffs_init_and_load_webpage();
 
     // 启动Web服务器
     web_server_start();
 
-    ESP_LOGI(TAG, "SmartLock system ready.");
+    ESP_LOGI(MAIN_TAG, "智能门锁系统就绪");
 }

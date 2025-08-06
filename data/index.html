@@ -35,22 +35,6 @@
                     <span class="value">v1.2.0</span>
                 </div>
             </div>
-
-            <div class="card">
-                <div class="card-title">安全信息</div>
-                <div class="status-item">
-                    <label>最近操作</label>
-                    <span class="value">无记录</span>
-                </div>
-                <div class="status-item">
-                    <label>今日开锁次数</label>
-                    <span class="value">0 次</span>
-                </div>
-                <div class="status-item">
-                    <label>异常记录</label>
-                    <span class="value">无</span>
-                </div>
-            </div>
         </div>
 
         <!-- 卡号库页面 -->
@@ -77,7 +61,10 @@
 
             <div class="card">
                 <div class="list-container" id="card-list-container">
-                    <!-- 卡号列表将通过JavaScript动态生成 -->
+                    <div class="empty-state">
+                        <i>💳</i>
+                        <p>暂无卡片数据</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -106,7 +93,10 @@
 
             <div class="card">
                 <div class="list-container" id="fingerprint-list-container">
-                    <!-- 指纹列表将通过JavaScript动态生成 -->
+                    <div class="empty-state">
+                        <i>👆</i>
+                        <p>暂无指纹数据</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -165,235 +155,58 @@
     </div>
 
     <script>
-        // 页面导航控制模块
-        const Navigation = {
-            init() {
-                this.navItems = document.querySelectorAll('.nav-item');
-                this.pageContainers = document.querySelectorAll('.page-container');
-                this.bindEvents();
-            },
+        var gateway = `ws://${window.location.hostname}/ws`;
+        var websocket;
 
-            bindEvents() {
-                this.navItems.forEach(item => {
-                    item.addEventListener('click', () => this.switchPage(item));
-                });
-            },
+        // 初始化WebSocket连接
+        function initWebSocket() {
+            console.log('尝试建立WebSocket连接...');
+            websocket = new WebSocket(gateway);
 
-            switchPage(item) {
-                const targetPageId = item.getAttribute('data-page');
+            websocket.onopen = function (event) {
+                console.log('WebSocket连接已打开');
+                document.querySelector('.status-tag').className = 'status-tag status-normal';
+                document.querySelector('.status-tag').textContent = '正常';
+            };
 
-                // 更新导航激活状态
-                this.navItems.forEach(nav => nav.classList.remove('active'));
-                item.classList.add('active');
+            websocket.onclose = function (event) {
+                console.log('WebSocket连接已关闭，2秒后重试...');
+                document.querySelector('.status-tag').textContent = '断开';
+                setTimeout(initWebSocket, 2000); // 2秒后重连
+            };
 
-                // 切换页面显示
-                this.pageContainers.forEach(page => {
-                    page.classList.toggle('active', page.id === targetPageId);
-                });
+            websocket.onerror = function (error) {
+                console.error('WebSocket错误:', error);
+                document.querySelector('.status-tag').textContent = '错误';
+            };
+        }
+
+        // 发送命令到ESP32
+        function sendCommand(command) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(command);
+                console.log('发送命令:', command);
+                return true;
+            } else {
+                console.error('WebSocket未连接，无法发送命令');
+                alert('设备连接已断开，请稍后重试');
+                return false;
             }
-        };
+        }
 
-        // 数据管理模块
-        const DataManager = {
-            cardData: [
-                { id: 1, cardNumber: "1234 5678 9012 3456" },
-                { id: 2, cardNumber: "9876 5432 1098 7654" },
-                { id: 3, cardNumber: "1122 3344 5566 7788" },
-                { id: 4, cardNumber: "1212 3434 5656 7878" },
-                { id: 5, cardNumber: "1357 2468 9012 3456" }
-            ],
-
-            fingerprintData: [
-                { id: 1, fingerprintNumber: "指纹 1" },
-                { id: 2, fingerprintNumber: "指纹 2" },
-                { id: 3, fingerprintNumber: "指纹 3" },
-                { id: 4, fingerprintNumber: "指纹 4" },
-                { id: 5, fingerprintNumber: "指纹 5" }
-            ],
-
-            // 获取最大ID
-            getMaxId(data) {
-                return data.length > 0 ? Math.max(...data.map(item => item.id)) : 0;
-            },
-
-            // 添加卡片
-            addCard() {
-                const newId = this.getMaxId(this.cardData) + 1;
-                // 生成随机卡号
-                const randomCardNumber = Array.from({ length: 4 }, () =>
-                    Math.floor(Math.random() * 10000).toString().padStart(4, '0')
-                ).join(' ');
-
-                this.cardData.push({ id: newId, cardNumber: randomCardNumber });
-                return this.cardData;
-            },
-
-            // 添加指纹
-            addFingerprint() {
-                const newId = this.getMaxId(this.fingerprintData) + 1;
-                this.fingerprintData.push({ id: newId, fingerprintNumber: `指纹 ${newId}` });
-                return this.fingerprintData;
-            },
-
-            // 删除项目
-            deleteItem(type, id) {
-                if (type === 'card') {
-                    this.cardData = this.cardData.filter(item => item.id !== id);
-                    return this.cardData;
-                } else if (type === 'fingerprint') {
-                    this.fingerprintData = this.fingerprintData.filter(fp => fp.id !== id);
-                    return this.fingerprintData;
-                }
-            },
-
-            // 清空数据
-            clearData(type) {
-                if (type === 'card') {
-                    this.cardData = [];
-                    return this.cardData;
-                } else if (type === 'fingerprint') {
-                    this.fingerprintData = [];
-                    return this.fingerprintData;
-                }
-            }
-        };
-
-        // 列表渲染模块
-        const ListRenderer = {
-            init() {
-                this.renderLists();
-            },
-
-            // 更新计数显示
-            updateCounts() {
-                document.getElementById('card-count').textContent = `${DataManager.cardData.length} 张`;
-                document.getElementById('fingerprint-count').textContent = `${DataManager.fingerprintData.length} 枚`;
-            },
-
-            // 渲染列表
-            renderList(data, containerId, type) {
-                const container = document.getElementById(containerId);
-                container.innerHTML = '';
-
-                if (data.length === 0) {
-                    const emptyIcon = type === 'card' ? '💳' : '👆';
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <i>${emptyIcon}</i>
-                            <p>暂无${type === 'card' ? '卡片' : '指纹'}数据</p>
-                        </div>
-                    `;
-                    return;
-                }
-
-                data.forEach(item => {
-                    const listItem = document.createElement('div');
-                    listItem.className = 'list-item';
-                    listItem.dataset.id = item.id;
-
-                    const content = type === 'card' ? item.cardNumber : item.fingerprintNumber;
-                    listItem.innerHTML = `
-                        <div class="content"><span>${content}</span></div>
-                        <button class="delete-btn" data-id="${item.id}">删除</button>
-                    `;
-
-                    container.appendChild(listItem);
-
-                    // 绑定删除按钮事件
-                    listItem.querySelector('.delete-btn').addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        Modal.showDeleteConfirm(type, item.id);
-                    });
-                });
-            },
-
-            // 渲染所有列表
-            renderLists() {
-                this.renderList(DataManager.cardData, 'card-list-container', 'card');
-                this.renderList(DataManager.fingerprintData, 'fingerprint-list-container', 'fingerprint');
-                this.updateCounts();
-            }
-        };
-
-        // 弹窗控制模块
-        const Modal = {
-            init() {
-                this.modal = document.getElementById('delete-modal');
-                this.confirmBtn = document.getElementById('confirm-delete');
-                this.cancelBtn = document.getElementById('cancel-delete');
-                this.itemToDelete = null;
-                this.deleteType = '';
-                this.deleteAction = '';
-                this.bindEvents();
-            },
-
-            bindEvents() {
-                this.confirmBtn.addEventListener('click', () => this.handleConfirm());
-                this.cancelBtn.addEventListener('click', () => this.hide());
-
-                // 点击外部关闭弹窗
-                this.modal.addEventListener('click', (e) => {
-                    if (e.target === this.modal) {
-                        this.hide();
-                    }
-                });
-            },
-
-            // 显示删除确认弹窗
-            showDeleteConfirm(type, id = null, action = 'delete') {
-                this.deleteType = type;
-                this.itemToDelete = id;
-                this.deleteAction = action;
-
-                // 更新弹窗文本
-                const modalText = action === 'clear'
-                    ? `确定要清空所有${type === 'card' ? '卡片' : '指纹'}吗？`
-                    : '确定要删除该项目吗？';
-
-                document.querySelector('.modal-content p').textContent = modalText;
-                this.modal.style.display = 'flex';
-            },
-
-            // 隐藏弹窗
-            hide() {
-                this.modal.style.display = 'none';
-                this.itemToDelete = null;
-                this.deleteType = '';
-                this.deleteAction = '';
-            },
-
-            // 处理确认删除
-            handleConfirm() {
-                if (this.deleteAction === 'delete') {
-                    // 单个删除
-                    DataManager.deleteItem(this.deleteType, this.itemToDelete);
-                } else if (this.deleteAction === 'clear') {
-                    // 清空全部
-                    DataManager.clearData(this.deleteType);
-                }
-
-                ListRenderer.renderLists();
-                this.hide();
-            }
-        };
-
-        // 主应用控制器
+        // 主应用初始化
         const App = {
             init() {
-                // 初始化各模块
+                initWebSocket(); // 使用新的WebSocket初始化函数
                 Navigation.init();
                 Modal.init();
-                ListRenderer.init();
-
-                // 绑定功能按钮事件
                 this.bindActionButtons();
             },
 
             bindActionButtons() {
                 // 卡片管理按钮
                 document.getElementById('add-card').addEventListener('click', () => {
-                    DataManager.addCard();
-                    ListRenderer.renderLists();
+                    sendCommand('add_card'); // 使用新的发送函数
                 });
 
                 document.getElementById('empty-card').addEventListener('click', () => {
@@ -401,13 +214,12 @@
                 });
 
                 document.getElementById('refresh-cards').addEventListener('click', () => {
-                    ListRenderer.renderLists();
+                    sendCommand('refresh_cards');
                 });
 
                 // 指纹管理按钮
                 document.getElementById('add-fingerprint').addEventListener('click', () => {
-                    DataManager.addFingerprint();
-                    ListRenderer.renderLists();
+                    sendCommand('add_fingerprint');
                 });
 
                 document.getElementById('empty-fingerprint').addEventListener('click', () => {
@@ -415,10 +227,19 @@
                 });
 
                 document.getElementById('refresh-fingerprints').addEventListener('click', () => {
-                    ListRenderer.renderLists();
+                    sendCommand('refresh_fingerprints');
                 });
             }
         };
+
+        // 弹窗确认按钮处理
+        document.getElementById('confirm-delete').addEventListener('click', () => {
+            if (Modal.deleteAction === 'clear') {
+                const command = Modal.deleteType === 'card' ? 'clear_cards' : 'clear_fingerprints';
+                sendCommand(command);
+            }
+            Modal.hide();
+        });
 
         // 初始化应用
         window.addEventListener('load', () => {

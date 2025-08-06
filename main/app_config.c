@@ -3,7 +3,6 @@
 // 全局变量定义
 httpd_handle_t server = NULL;
 const char *TAG = "SmartLock Server";
-int lock_state = 0; // 0: locked, 1: unlocked
 
 // 缓冲区定义
 char index_html[INDEX_HTML_BUFFER_SIZE];
