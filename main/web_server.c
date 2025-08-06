@@ -127,7 +127,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     if (ret != ESP_OK)
     {
         // 处理连接关闭错误，不显示错误日志
-        // if (ret == ESP_ERR_HTTPD_CONN_ABORTED || ret == ESP_ERR_HTTPD_CONN_RESET)
+        // if (ret == ESP_ERR_INVALID_STATE)
         // {
         //     ESP_LOGI(TAG, "客户端已断开连接");
         //     return ESP_OK;

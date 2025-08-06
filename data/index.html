@@ -155,6 +155,22 @@
     </div>
 
     <script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         var gateway = `ws://${window.location.hostname}/ws`;
         var websocket;
 
@@ -166,25 +182,54 @@
             websocket.onopen = function (event) {
                 console.log('WebSocket连接已打开');
                 document.querySelector('.status-tag').className = 'status-tag status-normal';
+
+
+
+
+
+
                 document.querySelector('.status-tag').textContent = '正常';
             };
 
+
             websocket.onclose = function (event) {
                 console.log('WebSocket连接已关闭，2秒后重试...');
+
+
+
+
+
+
                 document.querySelector('.status-tag').textContent = '断开';
                 setTimeout(initWebSocket, 2000); // 2秒后重连
+
+
             };
+
 
             websocket.onerror = function (error) {
                 console.error('WebSocket错误:', error);
+
                 document.querySelector('.status-tag').textContent = '错误';
             };
+
+
+
         }
+
 
         // 发送命令到ESP32
         function sendCommand(command) {
             if (websocket && websocket.readyState === WebSocket.OPEN) {
+
+
+
                 websocket.send(command);
+
+
+
+
+
                 console.log('发送命令:', command);
                 return true;
             } else {
@@ -194,7 +239,79 @@
             }
         }
 
-        // 主应用初始化
+
+        // 页面导航控制
+        const Navigation = {
+            init() {
+                this.navItems = document.querySelectorAll('.nav-item');
+                this.pageContainers = document.querySelectorAll('.page-container');
+                this.bindEvents();
+            },
+
+            bindEvents() {
+                this.navItems.forEach(item => {
+                    item.addEventListener('click', () => this.switchPage(item));
+                });
+            },
+
+            switchPage(item) {
+                const targetPageId = item.getAttribute('data-page');
+                this.navItems.forEach(nav => nav.classList.remove('active'));
+                item.classList.add('active');
+                this.pageContainers.forEach(page => {
+                    page.classList.toggle('active', page.id === targetPageId);
+                });
+            }
+        };
+
+        // 弹窗控制
+        const Modal = {
+            init() {
+                this.modal = document.getElementById('delete-modal');
+                this.confirmBtn = document.getElementById('confirm-delete');
+                this.cancelBtn = document.getElementById('cancel-delete');
+                this.itemToDelete = null;
+                this.deleteType = '';
+                this.deleteAction = '';
+                this.bindEvents();
+            },
+
+            bindEvents() {
+                this.confirmBtn.addEventListener('click', () => this.handleConfirm());
+                this.cancelBtn.addEventListener('click', () => this.hide());
+                this.modal.addEventListener('click', (e) => {
+                    if (e.target === this.modal) this.hide();
+                });
+            },
+
+            showDeleteConfirm(type, id = null, action = 'delete') {
+                this.deleteType = type;
+                this.itemToDelete = id;
+                this.deleteAction = action;
+                const modalText = action === 'clear'
+                    ? `确定要清空所有${type === 'card' ? '卡片' : '指纹'}吗？`
+                    : '确定要删除该项目吗？';
+                document.querySelector('.modal-content p').textContent = modalText;
+                this.modal.style.display = 'flex';
+            },
+
+            hide() {
+                this.modal.style.display = 'none';
+                this.itemToDelete = null;
+                this.deleteType = '';
+                this.deleteAction = '';
+            },
+
+            handleConfirm() {
+                if (this.deleteAction === 'clear') {
+                    const command = this.deleteType === 'card' ? 'clear_cards' : 'clear_fingerprints';
+                    WebSocketManager.sendCommand(command);
+                }
+                this.hide();
+            }
+        };
+
+        // 主应用控制器
         const App = {
             init() {
                 initWebSocket(); // 使用新的WebSocket初始化函数
