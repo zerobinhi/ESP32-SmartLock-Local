@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>ESP32 智能门锁控制中心</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            background-color: #f0f2f5;
+            height: 100%;
+            font-size: 16px;
+        }
+
+        body {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            color: #333;
+        }
+
+        .topnav {
+            background-color: #2c3e50;
+            color: white;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            position: relative;
+            z-index: 10;
+        }
+
+        .topnav h1 {
+            font-size: 1.4rem;
+            font-weight: 500;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .page-container {
+            display: none;
+        }
+
+        .page-container.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .card {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+            padding: 20px;
+            margin: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-title {
+            font-size: 1.15rem;
+            color: #2c3e50;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+        }
+
+        .card-title::before {
+            content: "";
+            width: 4px;
+            height: 18px;
+            background-color: #3498db;
+            border-radius: 2px;
+            margin-right: 8px;
+        }
+
+        .icon-box {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .icon-box .lock-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 15px;
+            background-color: #ecf0f1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 16px rgba(44, 62, 80, 0.12);
+            transition: transform 0.3s ease;
+        }
+
+        .icon-box .lock-icon:hover {
+            transform: scale(1.05);
+        }
+
+        .icon-box .lock-icon::before {
+            content: "🔒";
+            font-size: 4rem;
+        }
+
+        .icon-box .status-text {
+            font-size: 1.1rem;
+            color: #2c3e50;
+            font-weight: 500;
+            margin-top: 5px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 13px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-item label {
+            color: #666;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .status-item .value {
+            color: #333;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn i {
+            margin-right: 6px;
+            font-style: normal;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin: 12px;
+        }
+
+        .btn-add {
+            background-color: #27ae60;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-add:hover {
+            background-color: #219653;
+            box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-empty {
+            background-color: #e74c3c;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-empty:hover {
+            background-color: #c0392b;
+            box-shadow: 0 3px 8px rgba(231, 76, 60, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-refresh {
+            background-color: #3498db;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-refresh:hover {
+            background-color: #2980b9;
+            box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-operation {
+            width: 100%;
+            margin: 9px 0;
+            background-color: #3498db;
+            color: white;
+            padding: 13px;
+        }
+
+        .btn-operation:hover {
+            background-color: #2980b9;
+            box-shadow: 0 3px 8px rgba(52, 152, 219, 0.25);
+        }
+
+        .bottom-nav {
+            display: flex;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: white;
+            box-shadow: 0 -2px 15px rgba(0, 0, 0, 0.05);
+            z-index: 100;
+            padding: 8px 0 6px;
+        }
+
+        .nav-item {
+            flex: 1;
+            text-align: center;
+            padding: 6px 0;
+            text-decoration: none;
+            color: #999;
+            font-size: 0.8rem;
+            border-radius: 8px;
+            margin: 0 5px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-item.active {
+            color: #3498db;
+            background-color: rgba(52, 152, 219, 0.08);
+        }
+
+        .nav-item .icon {
+            display: block;
+            font-size: 1.5rem;
+            margin-bottom: 3px;
+            font-style: normal;
+        }
+
+        .list-container {
+            margin: 0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .list-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            background-color: white;
+            border-bottom: 1px solid #f5f5f5;
+            transition: background-color 0.2s ease;
+        }
+
+        .list-item:hover {
+            background-color: #f9f9f9;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-item .content {
+            flex: 1;
+            padding-right: 10px;
+            min-width: 0;
+        }
+
+        .list-item .content span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+            font-size: 0.9rem;
+            color: #333;
+        }
+
+        .list-item .delete-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            min-width: 50px;
+            text-align: center;
+            flex-shrink: 0;
+            transition: all 0.2s ease;
+        }
+
+        .list-item .delete-btn:hover {
+            background-color: #c0392b;
+            transform: translateY(-1px);
+        }
+
+        /* 弹窗样式修复 */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;  /* 使用视口宽度 */
+    height: 100vh; /* 使用视口高度 */
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+
+
+
+
+
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(2px);
+    /* 添加以下属性 */
+    margin: 0;
+    padding: 0;
+    border: none;
+    overflow: hidden;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 24px;
+    border-radius: 12px;
+    width: 85%;
+    max-width: 320px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    animation: modalPop 0.3s ease;
+
+
+    /* 添加以下属性确保内容不会溢出 */
+    box-sizing: border-box;
+}
+
+
+        @keyframes modalPop {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .modal-content p {
+            font-size: 1rem;
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 22px;
+            gap: 15px;
+        }
+
+        .modal-btn {
+            padding: 9px 0;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            flex: 1;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        .modal-confirm {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .modal-confirm:hover {
+            background-color: #c0392b;
+            transform: translateY(-1px);
+        }
+
+        .modal-cancel {
+            background-color: #f1f1f1;
+            color: #333;
+        }
+
+        .modal-cancel:hover {
+            background-color: #e5e5e5;
+            transform: translateY(-1px);
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: #3498db;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        .status-tag {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-normal {
+            background-color: #e8f5e9;
+            color: #2ecc71;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px 15px;
+            color: #999;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="topnav">
+        <h1>ESP32 智能门锁控制中心</h1>
+    </div>
+
+    <div class="content">
+        <!-- 首页页面 -->
+        <div id="home-page" class="page-container active">
+            <div class="card">
+                <div class="icon-box">
+                    <div class="lock-icon"></div>
+                    <div class="status-text">门锁已锁定</div>
+                </div>
+                <div class="card-title">设备状态</div>
+                <div class="status-item">
+                    <label>设备名称</label>
+                    <span class="value">ESP32 智能门锁</span>
+                </div>
+                <div class="status-item">
+                    <label>连接状态</label>
+                    <span class="value"><span class="status-tag status-normal">正常</span></span>
+                </div>
+                <div class="status-item">
+                    <label>固件版本</label>
+                    <span class="value">v1.2.0</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">安全信息</div>
+                <div class="status-item">
+                    <label>最近操作</label>
+                    <span class="value">无记录</span>
+                </div>
+                <div class="status-item">
+                    <label>今日开锁次数</label>
+                    <span class="value">0 次</span>
+                </div>
+                <div class="status-item">
+                    <label>异常记录</label>
+                    <span class="value">无</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 卡号库页面 -->
+        <div id="card-page" class="page-container">
+            <div class="card">
+                <div class="card-title">卡号库管理</div>
+                <div class="status-item">
+                    <label>已添加卡片</label>
+                    <span class="value" id="card-count">0 张</span>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-add" id="add-card">
+                    <i>+</i>添加卡片
+                </button>
+                <button class="btn btn-empty" id="empty-card">
+                    <i>✕</i>清空卡片
+                </button>
+                <button class="btn btn-refresh" id="refresh-cards">
+                    <i>↺</i>刷新
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="list-container" id="card-list-container">
+                    <!-- 卡号列表将通过JavaScript动态生成 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 指纹库页面 -->
+        <div id="fingerprint-page" class="page-container">
+            <div class="card">
+                <div class="card-title">指纹库管理</div>
+                <div class="status-item">
+                    <label>已录入指纹</label>
+                    <span class="value" id="fingerprint-count">0 枚</span>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-add" id="add-fingerprint">
+                    <i>+</i>录入指纹
+                </button>
+                <button class="btn btn-empty" id="empty-fingerprint">
+                    <i>✕</i>清空指纹
+                </button>
+                <button class="btn btn-refresh" id="refresh-fingerprints">
+                    <i>↺</i>刷新
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="list-container" id="fingerprint-list-container">
+                    <!-- 指纹列表将通过JavaScript动态生成 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 我的页面 -->
+        <div id="mine-page" class="page-container">
+            <div class="card">
+                <div class="card-title">系统设置</div>
+                <div class="status-item">
+                    <label>WiFi名称</label>
+                    <input type="text" name="wifi-name" placeholder="请输入WiFi名称">
+                </div>
+                <div class="status-item">
+                    <label>WiFi密码</label>
+                    <input type="password" name="wifi-password" placeholder="请输入WiFi密码">
+                </div>
+                <div class="status-item">
+                    <label>门锁密码</label>
+                    <input type="password" name="lock-password" placeholder="请输入门锁密码">
+                </div>
+                <button class="btn btn-operation">确认修改</button>
+                <button class="btn btn-operation">设备信息</button>
+                <button class="btn btn-operation">关于系统</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除确认弹窗 -->
+    <div class="modal" id="delete-modal">
+        <div class="modal-content">
+            <p>确定要删除该项目吗？</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-confirm" id="confirm-delete">确认</button>
+                <button class="modal-btn modal-cancel" id="cancel-delete">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-nav">
+        <a href="javascript:void(0)" class="nav-item active" data-page="home-page">
+            <span class="icon">🏠</span>
+            <span>首页</span>
+        </a>
+        <a href="javascript:void(0)" class="nav-item" data-page="card-page">
+            <span class="icon">💳</span>
+            <span>卡号库</span>
+        </a>
+        <a href="javascript:void(0)" class="nav-item" data-page="fingerprint-page">
+            <span class="icon">👆</span>
+            <span>指纹库</span>
+        </a>
+        <a href="javascript:void(0)" class="nav-item" data-page="mine-page">
+            <span class="icon">👤</span>
+            <span>我的</span>
+        </a>
+    </div>
+
+    <script>
+        // 页面导航控制模块
+        const Navigation = {
+            init() {
+                this.navItems = document.querySelectorAll('.nav-item');
+                this.pageContainers = document.querySelectorAll('.page-container');
+                this.bindEvents();
+            },
+
+            bindEvents() {
+                this.navItems.forEach(item => {
+                    item.addEventListener('click', () => this.switchPage(item));
+                });
+            },
+
+            switchPage(item) {
+                const targetPageId = item.getAttribute('data-page');
+
+                // 更新导航激活状态
+                this.navItems.forEach(nav => nav.classList.remove('active'));
+                item.classList.add('active');
+
+                // 切换页面显示
+                this.pageContainers.forEach(page => {
+                    page.classList.toggle('active', page.id === targetPageId);
+                });
+            }
+        };
+
+        // 数据管理模块
+        const DataManager = {
+            cardData: [
+                { id: 1, cardNumber: "1234 5678 9012 3456" },
+                { id: 2, cardNumber: "9876 5432 1098 7654" },
+                { id: 3, cardNumber: "1122 3344 5566 7788" },
+                { id: 4, cardNumber: "1212 3434 5656 7878" },
+                { id: 5, cardNumber: "1357 2468 9012 3456" }
+            ],
+
+            fingerprintData: [
+                { id: 1, fingerprintNumber: "指纹 1" },
+                { id: 2, fingerprintNumber: "指纹 2" },
+                { id: 3, fingerprintNumber: "指纹 3" },
+                { id: 4, fingerprintNumber: "指纹 4" },
+                { id: 5, fingerprintNumber: "指纹 5" }
+            ],
+
+            // 获取最大ID
+            getMaxId(data) {
+                return data.length > 0 ? Math.max(...data.map(item => item.id)) : 0;
+            },
+
+            // 添加卡片
+            addCard() {
+                const newId = this.getMaxId(this.cardData) + 1;
+                // 生成随机卡号
+                const randomCardNumber = Array.from({ length: 4 }, () =>
+                    Math.floor(Math.random() * 10000).toString().padStart(4, '0')
+                ).join(' ');
+
+                this.cardData.push({ id: newId, cardNumber: randomCardNumber });
+                return this.cardData;
+            },
+
+            // 添加指纹
+            addFingerprint() {
+                const newId = this.getMaxId(this.fingerprintData) + 1;
+                this.fingerprintData.push({ id: newId, fingerprintNumber: `指纹 ${newId}` });
+                return this.fingerprintData;
+            },
+
+            // 删除项目
+            deleteItem(type, id) {
+                if (type === 'card') {
+                    this.cardData = this.cardData.filter(item => item.id !== id);
+                    return this.cardData;
+                } else if (type === 'fingerprint') {
+                    this.fingerprintData = this.fingerprintData.filter(fp => fp.id !== id);
+                    return this.fingerprintData;
+                }
+            },
+
+            // 清空数据
+            clearData(type) {
+                if (type === 'card') {
+                    this.cardData = [];
+                    return this.cardData;
+                } else if (type === 'fingerprint') {
+                    this.fingerprintData = [];
+                    return this.fingerprintData;
+                }
+            }
+        };
+
+        // 列表渲染模块
+        const ListRenderer = {
+            init() {
+                this.renderLists();
+            },
+
+            // 更新计数显示
+            updateCounts() {
+                document.getElementById('card-count').textContent = `${DataManager.cardData.length} 张`;
+                document.getElementById('fingerprint-count').textContent = `${DataManager.fingerprintData.length} 枚`;
+            },
+
+            // 渲染列表
+            renderList(data, containerId, type) {
+                const container = document.getElementById(containerId);
+                container.innerHTML = '';
+
+                if (data.length === 0) {
+                    const emptyIcon = type === 'card' ? '💳' : '👆';
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i>${emptyIcon}</i>
+                            <p>暂无${type === 'card' ? '卡片' : '指纹'}数据</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                data.forEach(item => {
+                    const listItem = document.createElement('div');
+                    listItem.className = 'list-item';
+                    listItem.dataset.id = item.id;
+
+                    const content = type === 'card' ? item.cardNumber : item.fingerprintNumber;
+                    listItem.innerHTML = `
+                        <div class="content"><span>${content}</span></div>
+                        <button class="delete-btn" data-id="${item.id}">删除</button>
+                    `;
+
+                    container.appendChild(listItem);
+
+                    // 绑定删除按钮事件
+                    listItem.querySelector('.delete-btn').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        Modal.showDeleteConfirm(type, item.id);
+                    });
+                });
+            },
+
+            // 渲染所有列表
+            renderLists() {
+                this.renderList(DataManager.cardData, 'card-list-container', 'card');
+                this.renderList(DataManager.fingerprintData, 'fingerprint-list-container', 'fingerprint');
+                this.updateCounts();
+            }
+        };
+
+        // 弹窗控制模块（已修复）
+        const Modal = {
+            init() {
+                this.modal = document.getElementById('delete-modal');
+                this.confirmBtn = document.getElementById('confirm-delete');
+                this.cancelBtn = document.getElementById('cancel-delete');
+                this.itemToDelete = null;
+                this.deleteType = '';
+                this.deleteAction = '';
+                this.bindEvents();
+            },
+
+            bindEvents() {
+                this.confirmBtn.addEventListener('click', () => this.handleConfirm());
+                this.cancelBtn.addEventListener('click', () => this.hide());
+
+                // 点击外部关闭弹窗
+                this.modal.addEventListener('click', (e) => {
+                    if (e.target === this.modal) {
+                        this.hide();
+                    }
+                });
+            },
+
+            // 显示删除确认弹窗
+            showDeleteConfirm(type, id = null, action = 'delete') {
+                this.deleteType = type;
+                this.itemToDelete = id;
+                this.deleteAction = action;
+
+                // 更新弹窗文本
+                const modalText = action === 'clear'
+                    ? `确定要清空所有${type === 'card' ? '卡片' : '指纹'}吗？`
+                    : '确定要删除该项目吗？';
+
+                document.querySelector('.modal-content p').textContent = modalText;
+
+
+                this.modal.style.display = 'flex';
+            },
+
+            // 隐藏弹窗
+            hide() {
+                this.modal.style.display = 'none';
+                this.itemToDelete = null;
+                this.deleteType = '';
+                this.deleteAction = '';
+            },
+
+            // 处理确认删除
+            handleConfirm() {
+                if (this.deleteAction === 'delete') {
+                    // 单个删除
+                    DataManager.deleteItem(this.deleteType, this.itemToDelete);
+                } else if (this.deleteAction === 'clear') {
+                    // 清空全部
+                    DataManager.clearData(this.deleteType);
+                }
+
+                ListRenderer.renderLists();
+                this.hide();
+            }
+        };
+
+        // 主应用控制器
+        const App = {
+            init() {
+                // 初始化各模块
+                Navigation.init();
+                Modal.init();
+                ListRenderer.init();
+
+                // 绑定功能按钮事件
+                this.bindActionButtons();
+            },
+
+            bindActionButtons() {
+                // 卡片管理按钮
+                document.getElementById('add-card').addEventListener('click', () => {
+                    DataManager.addCard();
+                    ListRenderer.renderLists();
+                });
+
+                document.getElementById('empty-card').addEventListener('click', () => {
+                    Modal.showDeleteConfirm('card', null, 'clear');
+                });
+
+                document.getElementById('refresh-cards').addEventListener('click', () => {
+                    ListRenderer.renderLists();
+                });
+
+                // 指纹管理按钮
+                document.getElementById('add-fingerprint').addEventListener('click', () => {
+                    DataManager.addFingerprint();
+                    ListRenderer.renderLists();
+                });
+
+                document.getElementById('empty-fingerprint').addEventListener('click', () => {
+                    Modal.showDeleteConfirm('fingerprint', null, 'clear');
+                });
+
+                document.getElementById('refresh-fingerprints').addEventListener('click', () => {
+                    ListRenderer.renderLists();
+                });
+            }
+        };
+
+        // 初始化应用
+        window.addEventListener('load', () => {
+            App.init();
+        });
+    </script>
+</body>
+</html>
