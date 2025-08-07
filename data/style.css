@@ -69,10 +69,6 @@ body {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.card:hover {
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-}
-
 .card-title {
     font-size: 1.15rem;
     color: #2c3e50;
@@ -108,10 +104,6 @@ body {
     justify-content: center;
     box-shadow: 0 6px 16px rgba(44, 62, 80, 0.12);
     transition: transform 0.3s ease;
-}
-
-.icon-box .lock-icon:hover {
-    transform: scale(1.05);
 }
 
 .icon-box .lock-icon::before {
@@ -180,22 +172,10 @@ body {
     flex: 1;
 }
 
-.btn-add:hover {
-    background-color: #219653;
-    box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3);
-    transform: translateY(-1px);
-}
-
 .btn-empty {
     background-color: #e74c3c;
     color: white;
     flex: 1;
-}
-
-.btn-empty:hover {
-    background-color: #c0392b;
-    box-shadow: 0 3px 8px rgba(231, 76, 60, 0.3);
-    transform: translateY(-1px);
 }
 
 .btn-refresh {
@@ -204,23 +184,12 @@ body {
     flex: 1;
 }
 
-.btn-refresh:hover {
-    background-color: #2980b9;
-    box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
-    transform: translateY(-1px);
-}
-
 .btn-operation {
     width: 100%;
     margin: 9px 0;
     background-color: #3498db;
     color: white;
     padding: 13px;
-}
-
-.btn-operation:hover {
-    background-color: #2980b9;
-    box-shadow: 0 3px 8px rgba(52, 152, 219, 0.25);
 }
 
 .bottom-nav {
@@ -274,10 +243,6 @@ body {
     transition: background-color 0.2s ease;
 }
 
-.list-item:hover {
-    background-color: #f9f9f9;
-}
-
 .list-item:last-child {
     border-bottom: none;
 }
@@ -310,11 +275,6 @@ body {
     text-align: center;
     flex-shrink: 0;
     transition: all 0.2s ease;
-}
-
-.list-item .delete-btn:hover {
-    background-color: #c0392b;
-    transform: translateY(-1px);
 }
 
 .modal {
@@ -388,19 +348,9 @@ body {
     color: white;
 }
 
-.modal-confirm:hover {
-    background-color: #c0392b;
-    transform: translateY(-1px);
-}
-
 .modal-cancel {
     background-color: #f1f1f1;
     color: #333;
-}
-
-.modal-cancel:hover {
-    background-color: #e5e5e5;
-    transform: translateY(-1px);
 }
 
 input[type="text"],
@@ -418,19 +368,6 @@ input[type="password"]:focus {
     border-color: #3498db;
     outline: none;
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-}
-
-.status-tag {
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 15px;
-    font-size: 0.85rem;
-    font-weight: 500;
-}
-
-.status-normal {
-    background-color: #e8f5e9;
-    color: #2ecc71;
 }
 
 .empty-state {

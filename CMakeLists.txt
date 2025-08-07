@@ -8,3 +8,5 @@ project(ESP32-SmartLock-Local)
 
 # 启用SPIFFS支持
 spiffs_create_partition_image(spiffs data FLASH_IN_PROJECT)
+set(EXTRA_COMPONENT_DIRS ./components)
+set(PROJECT_VER "1.0.3")

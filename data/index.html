@@ -12,7 +12,6 @@
     <div class="topnav">
         <h1>ESP32 智能门锁控制中心</h1>
     </div>
-
     <div class="content">
         <!-- 首页页面 -->
         <div id="home-page" class="page-container active">
@@ -27,16 +26,11 @@
                     <span class="value">ESP32 智能门锁</span>
                 </div>
                 <div class="status-item">
-                    <label>连接状态</label>
-                    <span class="value"><span class="status-tag status-normal">正常</span></span>
-                </div>
-                <div class="status-item">
                     <label>固件版本</label>
                     <span class="value">v1.2.0</span>
                 </div>
             </div>
         </div>
-
         <!-- 卡号库页面 -->
         <div id="card-page" class="page-container">
             <div class="card">
@@ -46,7 +40,6 @@
                     <span class="value" id="card-count">0 张</span>
                 </div>
             </div>
-
             <div class="btn-group">
                 <button class="btn btn-add" id="add-card">
                     <i>+</i>添加卡片
@@ -58,7 +51,6 @@
                     <i>↺</i>刷新
                 </button>
             </div>
-
             <div class="card">
                 <div class="list-container" id="card-list-container">
                     <div class="empty-state">
@@ -68,7 +60,6 @@
                 </div>
             </div>
         </div>
-
         <!-- 指纹库页面 -->
         <div id="fingerprint-page" class="page-container">
             <div class="card">
@@ -78,7 +69,6 @@
                     <span class="value" id="fingerprint-count">0 枚</span>
                 </div>
             </div>
-
             <div class="btn-group">
                 <button class="btn btn-add" id="add-fingerprint">
                     <i>+</i>录入指纹
@@ -90,7 +80,6 @@
                     <i>↺</i>刷新
                 </button>
             </div>
-
             <div class="card">
                 <div class="list-container" id="fingerprint-list-container">
                     <div class="empty-state">
@@ -100,7 +89,6 @@
                 </div>
             </div>
         </div>
-
         <!-- 我的页面 -->
         <div id="mine-page" class="page-container">
             <div class="card">
@@ -123,7 +111,6 @@
             </div>
         </div>
     </div>
-
     <!-- 删除确认弹窗 -->
     <div class="modal" id="delete-modal">
         <div class="modal-content">
@@ -134,7 +121,6 @@
             </div>
         </div>
     </div>
-
     <div class="bottom-nav">
         <a href="javascript:void(0)" class="nav-item active" data-page="home-page">
             <span class="icon">🏠</span>
@@ -153,93 +139,49 @@
             <span>我的</span>
         </a>
     </div>
-
     <script>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         var gateway = `ws://${window.location.hostname}/ws`;
         var websocket;
-
-        // 初始化WebSocket连接
+        window.addEventListener('load', onLoad);
         function initWebSocket() {
-            console.log('尝试建立WebSocket连接...');
+            console.log('Trying to open a WebSocket connection...');
             websocket = new WebSocket(gateway);
-
-            websocket.onopen = function (event) {
-                console.log('WebSocket连接已打开');
-                document.querySelector('.status-tag').className = 'status-tag status-normal';
-
-
-
-
-
-
-                document.querySelector('.status-tag').textContent = '正常';
-            };
-
-
-            websocket.onclose = function (event) {
-                console.log('WebSocket连接已关闭，2秒后重试...');
-
-
-
-
-
-
-                document.querySelector('.status-tag').textContent = '断开';
-                setTimeout(initWebSocket, 2000); // 2秒后重连
-
-
-            };
-
-
-            websocket.onerror = function (error) {
-                console.error('WebSocket错误:', error);
-
-                document.querySelector('.status-tag').textContent = '错误';
-            };
-
-
-
+            websocket.onopen = onOpen;
+            websocket.onclose = onClose;
+            websocket.onmessage = onMessage;
         }
-
-
-        // 发送命令到ESP32
-        function sendCommand(command) {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-
-
-
-                websocket.send(command);
-
-
-
-
-
-                console.log('发送命令:', command);
-                return true;
-            } else {
-                console.error('WebSocket未连接，无法发送命令');
-                alert('设备连接已断开，请稍后重试');
-                return false;
-            }
+        function onOpen(event) {
+            console.log('Connection opened');
         }
-
-
+        function onClose(event) {
+            console.log('Connection closed');
+            setTimeout(initWebSocket, 2000);
+        }
+        function onMessage(event) { }
+        function onLoad(event) {
+            initWebSocket();
+            Navigation.init();
+            Modal.init(); // 补充初始化模态框
+            document.getElementById('add-card').addEventListener('click', () => {
+                websocket.send('add_card');
+            });
+            document.getElementById('empty-card').addEventListener('click', () => {
+                Modal.showDeleteConfirm('card', null, 'clear');
+            });
+            document.getElementById('refresh-cards').addEventListener('click', () => {
+                websocket.send('refresh_cards');
+            });
+            // 指纹管理按钮
+            document.getElementById('add-fingerprint').addEventListener('click', () => {
+                websocket.send('add_fingerprint');
+            });
+            document.getElementById('empty-fingerprint').addEventListener('click', () => {
+                Modal.showDeleteConfirm('fingerprint', null, 'clear');
+            });
+            document.getElementById('refresh-fingerprints').addEventListener('click', () => {
+                websocket.send('refresh_fingerprints');
+            });
+        }
         // 页面导航控制
         const Navigation = {
             init() {
@@ -247,13 +189,11 @@
                 this.pageContainers = document.querySelectorAll('.page-container');
                 this.bindEvents();
             },
-
             bindEvents() {
                 this.navItems.forEach(item => {
                     item.addEventListener('click', () => this.switchPage(item));
                 });
             },
-
             switchPage(item) {
                 const targetPageId = item.getAttribute('data-page');
                 this.navItems.forEach(nav => nav.classList.remove('active'));
@@ -263,7 +203,6 @@
                 });
             }
         };
-
         // 弹窗控制
         const Modal = {
             init() {
@@ -275,7 +214,6 @@
                 this.deleteAction = '';
                 this.bindEvents();
             },
-
             bindEvents() {
                 this.confirmBtn.addEventListener('click', () => this.handleConfirm());
                 this.cancelBtn.addEventListener('click', () => this.hide());
@@ -283,7 +221,6 @@
                     if (e.target === this.modal) this.hide();
                 });
             },
-
             showDeleteConfirm(type, id = null, action = 'delete') {
                 this.deleteType = type;
                 this.itemToDelete = id;
@@ -294,74 +231,20 @@
                 document.querySelector('.modal-content p').textContent = modalText;
                 this.modal.style.display = 'flex';
             },
-
             hide() {
                 this.modal.style.display = 'none';
                 this.itemToDelete = null;
                 this.deleteType = '';
                 this.deleteAction = '';
             },
-
             handleConfirm() {
                 if (this.deleteAction === 'clear') {
                     const command = this.deleteType === 'card' ? 'clear_cards' : 'clear_fingerprints';
-                    WebSocketManager.sendCommand(command);
+                    websocket.send(command);
                 }
                 this.hide();
             }
         };
-
-        // 主应用控制器
-        const App = {
-            init() {
-                initWebSocket(); // 使用新的WebSocket初始化函数
-                Navigation.init();
-                Modal.init();
-                this.bindActionButtons();
-            },
-
-            bindActionButtons() {
-                // 卡片管理按钮
-                document.getElementById('add-card').addEventListener('click', () => {
-                    sendCommand('add_card'); // 使用新的发送函数
-                });
-
-                document.getElementById('empty-card').addEventListener('click', () => {
-                    Modal.showDeleteConfirm('card', null, 'clear');
-                });
-
-                document.getElementById('refresh-cards').addEventListener('click', () => {
-                    sendCommand('refresh_cards');
-                });
-
-                // 指纹管理按钮
-                document.getElementById('add-fingerprint').addEventListener('click', () => {
-                    sendCommand('add_fingerprint');
-                });
-
-                document.getElementById('empty-fingerprint').addEventListener('click', () => {
-                    Modal.showDeleteConfirm('fingerprint', null, 'clear');
-                });
-
-                document.getElementById('refresh-fingerprints').addEventListener('click', () => {
-                    sendCommand('refresh_fingerprints');
-                });
-            }
-        };
-
-        // 弹窗确认按钮处理
-        document.getElementById('confirm-delete').addEventListener('click', () => {
-            if (Modal.deleteAction === 'clear') {
-                const command = Modal.deleteType === 'card' ? 'clear_cards' : 'clear_fingerprints';
-                sendCommand(command);
-            }
-            Modal.hide();
-        });
-
-        // 初始化应用
-        window.addEventListener('load', () => {
-            App.init();
-        });
     </script>
 </body>
 
