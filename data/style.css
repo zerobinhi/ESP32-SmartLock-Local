@@ -64,7 +64,7 @@ body {
     background-color: white;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
-    padding: 20px;
+    padding: 20px 20px 0;
     margin: 12px;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -72,7 +72,6 @@ body {
 .card-title {
     font-size: 1.15rem;
     color: #2c3e50;
-    margin-bottom: 16px;
     padding-bottom: 10px;
     border-bottom: 1px solid #f0f0f0;
     display: flex;
@@ -111,18 +110,12 @@ body {
     font-size: 4rem;
 }
 
-.icon-box .status-text {
-    font-size: 1.1rem;
-    color: #2c3e50;
-    font-weight: 500;
-    margin-top: 5px;
-}
-
 .status-item {
     display: flex;
     justify-content: space-between;
-    padding: 13px 0;
+    padding: 12px;
     border-bottom: 1px solid #f5f5f5;
+    align-items: center;
 }
 
 .status-item:last-child {
@@ -134,12 +127,21 @@ body {
     font-size: 0.95rem;
     display: flex;
     align-items: center;
+
 }
 
 .status-item .value {
     color: #333;
     font-weight: 500;
     font-size: 0.95rem;
+}
+
+/* 验证信息样式 */
+.validation-message {
+    font-size: 0.8rem;
+    margin-left: 10px;
+    color: #7f8c8d;
+
 }
 
 .btn {
@@ -243,8 +245,13 @@ body {
     transition: background-color 0.2s ease;
 }
 
+.list-item:first-child {
+    padding-top: 0px;
+}
+
 .list-item:last-child {
     border-bottom: none;
+    padding-bottom: 12px;
 }
 
 .list-item .content {
@@ -276,6 +283,7 @@ body {
     flex-shrink: 0;
     transition: all 0.2s ease;
 }
+
 
 .modal {
     display: none;

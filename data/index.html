@@ -18,12 +18,15 @@
             <div class="card">
                 <div class="icon-box">
                     <div class="lock-icon"></div>
-                    <div class="status-text">门锁已锁定</div>
                 </div>
-                <div class="card-title">设备状态</div>
+                <div class="card-title">设备信息</div>
                 <div class="status-item">
-                    <label>设备名称</label>
-                    <span class="value">ESP32 智能门锁</span>
+                    <label>指纹数量</label>
+                    <span class="value" id="home-fingerprint-count">0</span>
+                </div>
+                <div class="status-item">
+                    <label>卡号数量</label>
+                    <span class="value" id="home-card-count">0</span>
                 </div>
                 <div class="status-item">
                     <label>固件版本</label>
@@ -89,23 +92,33 @@
                 </div>
             </div>
         </div>
-        <!-- 我的页面 -->
         <div id="mine-page" class="page-container">
             <div class="card">
                 <div class="card-title">系统设置</div>
                 <div class="status-item">
                     <label>WiFi名称</label>
-                    <input type="text" name="wifi-name" placeholder="请输入WiFi名称">
+                    <div style="width: 100%;">
+                        <input type="text" name="wifi-name" placeholder="仅允许英文或数字" oninput="validateWifiName(this)">
+                        <span class="validation-message" id="wifi-name-message"></span>
+                    </div>
                 </div>
                 <div class="status-item">
                     <label>WiFi密码</label>
-                    <input type="password" name="wifi-password" placeholder="请输入WiFi密码">
+                    <div style="width: 100%;">
+                        <input type="text" name="wifi-password" placeholder="仅允许英文或数字，最少8位"
+                            oninput="validateWifiPassword(this)">
+                        <span class="validation-message" id="wifi-password-message"></span>
+                    </div>
                 </div>
                 <div class="status-item">
                     <label>门锁密码</label>
-                    <input type="password" name="lock-password" placeholder="请输入门锁密码">
+                    <div style="width: 100%;">
+                        <input type="text" name="lock-password" placeholder="请输入6位数字"
+                            oninput="validateLockPassword(this)">
+                        <span class="validation-message" id="lock-password-message"></span>
+                    </div>
                 </div>
-                <button class="btn btn-operation">确认修改</button>
+                <button class="btn btn-operation" id="save-settings">确认修改</button>
                 <button class="btn btn-operation">设备信息</button>
                 <button class="btn btn-operation">关于系统</button>
             </div>
@@ -118,6 +131,15 @@
             <div class="modal-buttons">
                 <button class="modal-btn modal-confirm" id="confirm-delete">确认</button>
                 <button class="modal-btn modal-cancel" id="cancel-delete">取消</button>
+            </div>
+        </div>
+    </div>
+    <!-- 提示弹窗 -->
+    <div class="modal" id="alert-modal">
+        <div class="modal-content">
+            <p id="alert-message"></p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-confirm" id="confirm-alert">确认</button>
             </div>
         </div>
     </div>
@@ -142,9 +164,12 @@
     <script>
         var gateway = `ws://${window.location.hostname}/ws`;
         var websocket;
+        // 新增：存储卡片和指纹数据的数组
+        let cardData = [];
+        let fingerprintData = [];
+
         window.addEventListener('load', onLoad);
         function initWebSocket() {
-            console.log('Trying to open a WebSocket connection...');
             websocket = new WebSocket(gateway);
             websocket.onopen = onOpen;
             websocket.onclose = onClose;
@@ -155,32 +180,77 @@
         }
         function onClose(event) {
             console.log('Connection closed');
-            setTimeout(initWebSocket, 2000);
+            // setTimeout(initWebSocket, 2000); 暂时注释，发布之前取消注释
         }
         function onMessage(event) { }
         function onLoad(event) {
             initWebSocket();
             Navigation.init();
-            Modal.init(); // 补充初始化模态框
-            document.getElementById('add-card').addEventListener('click', () => {
-                websocket.send('add_card');
-            });
-            document.getElementById('empty-card').addEventListener('click', () => {
-                Modal.showDeleteConfirm('card', null, 'clear');
-            });
-            document.getElementById('refresh-cards').addEventListener('click', () => {
-                websocket.send('refresh_cards');
-            });
-            // 指纹管理按钮
-            document.getElementById('add-fingerprint').addEventListener('click', () => {
-                websocket.send('add_fingerprint');
-            });
-            document.getElementById('empty-fingerprint').addEventListener('click', () => {
-                Modal.showDeleteConfirm('fingerprint', null, 'clear');
-            });
-            document.getElementById('refresh-fingerprints').addEventListener('click', () => {
-                websocket.send('refresh_fingerprints');
-            });
+            Modal.init();
+            // 保存设置按钮事件
+            document.getElementById('save-settings').addEventListener('click', saveSettings);
+        }
+        // 验证WiFi名称
+        function validateWifiName(input) {
+            input.value = input.value.replace(/[^A-Za-z0-9]/g, '');
+            const messageEl = document.getElementById('wifi-name-message');
+            if (input.value.match(/[^A-Za-z0-9]/)) {
+                messageEl.textContent = '仅允许输入英文或数字';
+                messageEl.style.color = '#e74c3c';
+            } else {
+                messageEl.textContent = '';
+            }
+        }
+        // 验证WiFi密码
+        function validateWifiPassword(input) {
+            input.value = input.value.replace(/[^A-Za-z0-9]/g, '');
+            const messageEl = document.getElementById('wifi-password-message');
+            if (input.value.match(/[^A-Za-z0-9]/)) {
+                messageEl.textContent = '仅允许输入英文或数字';
+                messageEl.style.color = '#e74c3c';
+            } else if (input.value.length > 0 && input.value.length < 8) {
+                messageEl.textContent = `还需${8 - input.value.length}位`;
+                messageEl.style.color = '#f39c12';
+            } else {
+                messageEl.textContent = '';
+            }
+        }
+        // 验证门锁密码
+        function validateLockPassword(input) {
+            input.value = input.value.replace(/[^0-9]/g, '').slice(0, 6);
+            const messageEl = document.getElementById('lock-password-message');
+            if (input.value.match(/[^0-9]/)) {
+                messageEl.textContent = '仅允许输入数字';
+                messageEl.style.color = '#e74c3c';
+            } else if (input.value.length > 0 && input.value.length < 6) {
+                messageEl.textContent = `还需${6 - input.value.length}位`;
+                messageEl.style.color = '#f39c12';
+            } else {
+                messageEl.textContent = '';
+            }
+        }
+        // 保存设置
+        function saveSettings() {
+            const wifiName = document.querySelector('input[name="wifi-name"]').value;
+            const wifiPassword = document.querySelector('input[name="wifi-password"]').value;
+            const lockPassword = document.querySelector('input[name="lock-password"]').value;
+            if (wifiPassword.length >= 0 && wifiPassword.length < 8) {
+                showAlert('WiFi密码长度不能少于8位');
+                return;
+            }
+            if (lockPassword.length >= 0 && lockPassword.length !== 6) {
+                showAlert('门锁密码必须是6位数字');
+                return;
+            }
+            websocket.send(`save_settings:${wifiName},${wifiPassword},${lockPassword}`);
+            showAlert('设置已保存');
+        }
+        // 显示提示弹窗
+        function showAlert(message) {
+            const alertModal = document.getElementById('alert-modal');
+            const alertMessage = document.getElementById('alert-message');
+            alertMessage.textContent = message;
+            alertModal.style.display = 'flex';
         }
         // 页面导航控制
         const Navigation = {
@@ -206,20 +276,148 @@
         // 弹窗控制
         const Modal = {
             init() {
-                this.modal = document.getElementById('delete-modal');
-                this.confirmBtn = document.getElementById('confirm-delete');
-                this.cancelBtn = document.getElementById('cancel-delete');
+                this.deleteModal = document.getElementById('delete-modal');
+                this.confirmDeleteBtn = document.getElementById('confirm-delete');
+                this.cancelDeleteBtn = document.getElementById('cancel-delete');
+                this.alertModal = document.getElementById('alert-modal');
+                this.confirmAlertBtn = document.getElementById('confirm-alert');
                 this.itemToDelete = null;
                 this.deleteType = '';
                 this.deleteAction = '';
                 this.bindEvents();
             },
             bindEvents() {
-                this.confirmBtn.addEventListener('click', () => this.handleConfirm());
-                this.cancelBtn.addEventListener('click', () => this.hide());
-                this.modal.addEventListener('click', (e) => {
-                    if (e.target === this.modal) this.hide();
+                this.confirmDeleteBtn.addEventListener('click', () => this.handleDeleteConfirm());
+                this.cancelDeleteBtn.addEventListener('click', () => this.hideDeleteModal());
+                this.deleteModal.addEventListener('click', (e) => {
+                    if (e.target === this.deleteModal) this.hideDeleteModal();
                 });
+                this.confirmAlertBtn.addEventListener('click', () => this.hideAlertModal());
+                this.alertModal.addEventListener('click', (e) => {
+                    if (e.target === this.alertModal) this.hideAlertModal();
+                });
+                // 卡号管理按钮 - 修改添加卡片逻辑
+                document.getElementById('add-card').addEventListener('click', () => {
+                    websocket.send('add_card');
+                    // 新增：添加卡片数据
+                    this.addNewCard();
+                });
+                document.getElementById('empty-card').addEventListener('click', () => {
+                    this.showDeleteConfirm('card', null, 'clear');
+                });
+                document.getElementById('refresh-cards').addEventListener('click', () => {
+                    websocket.send('refresh_cards');
+                });
+                // 指纹管理按钮 - 修改添加指纹逻辑
+                document.getElementById('add-fingerprint').addEventListener('click', () => {
+                    websocket.send('add_fingerprint');
+                    // 新增：添加指纹数据
+                    this.addNewFingerprint();
+                });
+                document.getElementById('empty-fingerprint').addEventListener('click', () => {
+                    this.showDeleteConfirm('fingerprint', null, 'clear');
+                });
+                document.getElementById('refresh-fingerprints').addEventListener('click', () => {
+                    websocket.send('refresh_fingerprints');
+                });
+            },
+            // 新增：添加新卡片
+            addNewCard() {
+                // 生成随机卡号（格式示例：8位十六进制）
+                const randomCardId = Math.floor(Math.random() * 0xFFFFFFF).toString(16).toUpperCase().padStart(8, '0');
+                const cardId = cardData.length + 1;
+                // 添加到数据数组
+                cardData.push({
+                    id: cardId,
+                    cardNumber: randomCardId,
+                });
+                // 更新显示
+                this.updateCardList();
+                this.updateCardCount();
+            },
+            // 新增：添加新指纹
+            addNewFingerprint() {
+                const fingerprintId = fingerprintData.length + 1;
+                // 添加到数据数组
+                fingerprintData.push({
+                    id: fingerprintId,
+                    templateId: fingerprintId,
+                });
+                // 更新显示
+                this.updateFingerprintList();
+                this.updateFingerprintCount();
+            },
+            // 新增：更新卡片列表显示
+            updateCardList() {
+                const container = document.getElementById('card-list-container');
+                // 清空容器（保留空状态判断）
+                container.innerHTML = '';
+
+                if (cardData.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i>💳</i>
+                            <p>暂无卡片数据</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // 添加列表项
+                cardData.forEach(card => {
+                    const item = document.createElement('div');
+                    item.className = 'list-item';
+                    item.innerHTML = `
+                        <div class="content">
+                            <span>卡片 #${card.id}</span>
+                            <span style="font-size: 0.8rem; color: #666;">卡号: ${card.cardNumber}</span>
+                        </div>
+                        <button class="delete-btn" onclick="Modal.showDeleteConfirm('card', ${card.id})">删除</button>
+                    `;
+                    container.appendChild(item);
+                });
+            },
+            // 新增：更新指纹列表显示
+            updateFingerprintList() {
+                const container = document.getElementById('fingerprint-list-container');
+                // 清空容器（保留空状态判断）
+                container.innerHTML = '';
+
+                if (fingerprintData.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i>👆</i>
+                            <p>暂无指纹数据</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // 添加列表项
+                fingerprintData.forEach(fingerprint => {
+                    const item = document.createElement('div');
+                    item.className = 'list-item';
+                    item.innerHTML = `
+                        <div class="content">
+                            <span>指纹 #${fingerprint.id}</span>
+                            <span style="font-size: 0.8rem; color: #666;">模板ID: ${fingerprint.templateId}</span>
+                        </div>
+                        <button class="delete-btn" onclick="Modal.showDeleteConfirm('fingerprint', ${fingerprint.id})">删除</button>
+                    `;
+                    container.appendChild(item);
+                });
+            },
+            // 新增：更新卡片计数显示
+            updateCardCount() {
+                const count = cardData.length;
+                document.getElementById('card-count').textContent = `${count} 张`;
+                document.getElementById('home-card-count').textContent = count;
+            },
+            // 新增：更新指纹计数显示
+            updateFingerprintCount() {
+                const count = fingerprintData.length;
+                document.getElementById('fingerprint-count').textContent = `${count} 枚`;
+                document.getElementById('home-fingerprint-count').textContent = count;
             },
             showDeleteConfirm(type, id = null, action = 'delete') {
                 this.deleteType = type;
@@ -228,21 +426,45 @@
                 const modalText = action === 'clear'
                     ? `确定要清空所有${type === 'card' ? '卡片' : '指纹'}吗？`
                     : '确定要删除该项目吗？';
-                document.querySelector('.modal-content p').textContent = modalText;
-                this.modal.style.display = 'flex';
+                document.querySelector('#delete-modal .modal-content p').textContent = modalText;
+                this.deleteModal.style.display = 'flex';
             },
-            hide() {
-                this.modal.style.display = 'none';
+            hideDeleteModal() {
+                this.deleteModal.style.display = 'none';
                 this.itemToDelete = null;
                 this.deleteType = '';
                 this.deleteAction = '';
             },
-            handleConfirm() {
+            hideAlertModal() {
+                this.alertModal.style.display = 'none';
+            },
+            handleDeleteConfirm() {
                 if (this.deleteAction === 'clear') {
+                    // 清空所有数据
+                    if (this.deleteType === 'card') {
+                        cardData = [];
+                        this.updateCardList();
+                        this.updateCardCount();
+                    } else {
+                        fingerprintData = [];
+                        this.updateFingerprintList();
+                        this.updateFingerprintCount();
+                    }
                     const command = this.deleteType === 'card' ? 'clear_cards' : 'clear_fingerprints';
                     websocket.send(command);
+                } else {
+                    // 删除单个项目
+                    if (this.deleteType === 'card') {
+                        cardData = cardData.filter(item => item.id !== this.itemToDelete);
+                        this.updateCardList();
+                        this.updateCardCount();
+                    } else {
+                        fingerprintData = fingerprintData.filter(item => item.id !== this.itemToDelete);
+                        this.updateFingerprintList();
+                        this.updateFingerprintCount();
+                    }
                 }
-                this.hide();
+                this.hideDeleteModal();
             }
         };
     </script>
