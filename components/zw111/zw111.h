@@ -2,6 +2,7 @@
 #define ZW111_H_
 
 #include "driver/uart.h"
+#include "driver/gpio.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include "app_config.h"
@@ -51,5 +52,36 @@
 #define LED_BR 0x05    // 蓝+红灯
 #define LED_GR 0x06    // 绿+红灯
 #define LED_ALL 0x07   // 红+绿+蓝全亮
+
+struct fingerprint_device
+{
+    /**
+     * 0X00 刚开机的状态
+     * 0X01 读索引表状态
+     * 0X02 注册指纹状态
+     * 0X03 删除指纹状态
+     * 0X04 验证指纹状态
+     * 0X0A 取消命令状态
+     * 0X0B 准备关机状态
+     */
+    uint8_t state;
+    /**
+     * false 断电状态
+     * true 上电状态
+     */
+    bool power;
+    // 设备地址（4字节），默认地址0xFFFFFFFF，可修改
+    uint8_t deviceAddress[4];
+
+    // 已注册指纹ID数组，最大支持100枚（0-99），未使用位置为0xFF
+    uint8_t fingerIDArray[100];
+
+    // 当前有效指纹数量
+    uint8_t fingerNumber;
+};
+
+void fingerprint_task(void *pvParameters);
+void uart_task(void *pvParameters);
+esp_err_t fingerprint_initialization();
 
 #endif // ZW111_H_

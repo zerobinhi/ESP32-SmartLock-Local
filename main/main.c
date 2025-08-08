@@ -1,11 +1,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-// #include "esp_system.h"
 #include "nvs_flash.h"
 #include "app_config.h"
 #include "wifi.h"
 #include "spiffs.h"
 #include "web_server.h"
+#include "zw111.h"
 
 static const char *MAIN_TAG = "SmartLock Main";
 
@@ -27,6 +27,7 @@ void app_main(void)
 
     // 启动Web服务器
     web_server_start();
-
+    // 初始化指纹模块
+    fingerprint_initialization();
     ESP_LOGI(MAIN_TAG, "智能门锁系统就绪");
 }
