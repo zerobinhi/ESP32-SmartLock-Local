@@ -2,7 +2,7 @@
 #define __FT6336U_DRIVER_H_
 
 #include "driver/i2c_master.h"
-#include "esp_err.h"
+#include "app_config.h"
 
 #define FT6336U_I2C_ADDR 0x38 // 设备I2C地址
 

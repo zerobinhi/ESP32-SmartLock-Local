@@ -1,7 +1,6 @@
 idf_component_register(
         SRCS
         "main.c"
-        "src/app_config.c"
         "src/spiffs.c"
         "src/web_server.c"
         "src/wifi.c"

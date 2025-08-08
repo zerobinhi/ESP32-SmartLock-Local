@@ -1,5 +1,4 @@
 #include "FT6336U_Driver.h"
-#include "esp_log.h"
 
 #define TAG "FT6336U"
 

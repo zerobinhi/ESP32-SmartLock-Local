@@ -96,23 +96,23 @@
             <div class="card">
                 <div class="card-title">系统设置</div>
                 <div class="status-item">
-                    <label>WiFi名称</label>
-                    <div style="width: 100%;">
+                    <label>WiFi名称：</label>
+                    <div class="input-container">
                         <input type="text" name="wifi-name" placeholder="仅允许英文或数字" oninput="validateWifiName(this)">
                         <span class="validation-message" id="wifi-name-message"></span>
                     </div>
                 </div>
                 <div class="status-item">
-                    <label>WiFi密码</label>
-                    <div style="width: 100%;">
+                    <label>WiFi密码：</label>
+                    <div class="input-container">
                         <input type="text" name="wifi-password" placeholder="仅允许英文或数字，最少8位"
                             oninput="validateWifiPassword(this)">
                         <span class="validation-message" id="wifi-password-message"></span>
                     </div>
                 </div>
                 <div class="status-item">
-                    <label>门锁密码</label>
-                    <div style="width: 100%;">
+                    <label>门锁密码：</label>
+                    <div class="input-container">
                         <input type="text" name="lock-password" placeholder="请输入6位数字"
                             oninput="validateLockPassword(this)">
                         <span class="validation-message" id="lock-password-message"></span>
@@ -121,6 +121,7 @@
                 <button class="btn btn-operation" id="save-settings">确认修改</button>
                 <button class="btn btn-operation">设备信息</button>
                 <button class="btn btn-operation">关于系统</button>
+                <div style="height: 12px;"></div>
             </div>
         </div>
     </div>
@@ -234,6 +235,11 @@
             const wifiName = document.querySelector('input[name="wifi-name"]').value;
             const wifiPassword = document.querySelector('input[name="wifi-password"]').value;
             const lockPassword = document.querySelector('input[name="lock-password"]').value;
+            if
+                (wifiName.length === 0) {
+                showAlert('WiFi名称不能为空');
+                return;
+            }
             if (wifiPassword.length >= 0 && wifiPassword.length < 8) {
                 showAlert('WiFi密码长度不能少于8位');
                 return;

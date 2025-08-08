@@ -1,16 +1,15 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include "esp_log.h"
-#include "esp_err.h"
-#include "esp_http_server.h"
-#include "app_config.h"
+#include "web_server.h"
 
-// HTTP请求处理器声明
+char index_html[INDEX_HTML_BUFFER_SIZE];
+char response_data[RESPONSE_DATA_BUFFER_SIZE];
+
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
+
+httpd_handle_t server = NULL;
+
+static const char *TAG = "SmartLock Web Server";
 
 httpd_handle_t web_server_start(void)
 {

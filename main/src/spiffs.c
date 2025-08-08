@@ -1,11 +1,6 @@
-#include <stdio.h>
-#include <string.h>
-#include <sys/stat.h>
-#include "esp_log.h"
-#include "esp_err.h"
-#include "esp_spiffs.h"
-#include "app_config.h"
+#include "spiffs.h"
 
+static const char *TAG = "SmartLock SPIFFS";
 void spiffs_init_and_load_webpage(void)
 {
     esp_vfs_spiffs_conf_t conf = {

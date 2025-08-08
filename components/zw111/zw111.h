@@ -4,8 +4,7 @@
 #include "driver/uart.h"
 #include <stdint.h>
 #include <stdbool.h>
-#include <string.h>
-#include "esp_err.h" // 补充ESP错误码定义依赖
+#include "app_config.h"
 
 // ========================== 硬件配置宏 ==========================
 #define EX_UART_NUM UART_NUM_2        // 指纹模块使用的UART端口
