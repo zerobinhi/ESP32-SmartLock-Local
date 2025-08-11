@@ -183,7 +183,40 @@
             console.log('Connection closed');
             // setTimeout(initWebSocket, 2000); 暂时注释，发布之前取消注释
         }
-        function onMessage(event) { }
+        function onMessage(event) {
+
+            const data = JSON.parse(event.data);
+            console.log('收到ESP32数据:', data);
+            switch (data.type) {
+                case 'card_list':
+                    updateCardData(data.data);
+                    break;
+                case 'fingerprint_list':
+                    updateFingerprintData(data.data);
+                    break;
+                case 'status':
+                    showAlert(data.message);
+                    break;
+                case 'init_data':
+                    // 初始化数据同步
+                    updateCardData(data.cards);
+                    updateFingerprintData(data.fingers);
+                    break;
+                default:
+                    console.log('未知消息类型:', data.type);
+            }
+        }
+        function updateCardData(newCards) {
+            cardData = newCards;
+            Modal.updateCardList();
+            Modal.updateCardCount();
+        }
+
+        function updateFingerprintData(newFingerprints) {
+            fingerprintData = newFingerprints;
+            Modal.updateFingerprintList();
+            Modal.updateFingerprintCount();
+        }
         function onLoad(event) {
             initWebSocket();
             Navigation.init();
@@ -306,7 +339,7 @@
                 document.getElementById('add-card').addEventListener('click', () => {
                     websocket.send('add_card');
                     // 新增：添加卡片数据
-                    this.addNewCard();
+                    // this.addNewCard();
                 });
                 document.getElementById('empty-card').addEventListener('click', () => {
                     this.showDeleteConfirm('card', null, 'clear');
@@ -318,7 +351,7 @@
                 document.getElementById('add-fingerprint').addEventListener('click', () => {
                     websocket.send('add_fingerprint');
                     // 新增：添加指纹数据
-                    this.addNewFingerprint();
+                    // this.addNewFingerprint();
                 });
                 document.getElementById('empty-fingerprint').addEventListener('click', () => {
                     this.showDeleteConfirm('fingerprint', null, 'clear');

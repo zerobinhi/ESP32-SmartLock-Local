@@ -712,6 +712,7 @@ void fingerprint_task(void *pvParameters)
         read_index_table(0);                    // 读取第0页索引表
         vTaskDelay(pdMS_TO_TICKS(2000));
         gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 给ZW101断电
+        zw111.state = 0X00;                    // 切换为初始状态
         vTaskDelay(pdMS_TO_TICKS(1000));        // 等待1秒
     }
 }
