@@ -65,11 +65,13 @@ struct fingerprint_device
      * 0X0B 准备关机状态
      */
     uint8_t state;
+
     /**
      * false 断电状态
      * true 上电状态
      */
     bool power;
+
     // 设备地址（4字节），默认地址0xFFFFFFFF，可修改
     uint8_t deviceAddress[4];
 
@@ -83,5 +85,6 @@ struct fingerprint_device
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);
 esp_err_t fingerprint_initialization();
+esp_err_t delete_char(uint16_t ID, uint16_t count);
 
 #endif // ZW111_H_

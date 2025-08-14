@@ -191,7 +191,7 @@ body {
     margin: 9px 0;
     background-color: #3498db;
     color: white;
-    padding: 13px; 
+    padding: 13px;
 }
 
 .bottom-nav {
@@ -397,4 +397,27 @@ input[type="password"]:focus {
     margin-bottom: 15px;
     display: block;
     opacity: 0.6;
+}
+
+#success-toast-modal {
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.success-content {
+    background-color: #000;
+    color: #fff;
+    border-radius: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    min-width: 180px;
+}
+
+.success-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+    color: #4CAF50;
+}
+
+#success-toast-modal .modal-content {
+    padding-bottom: 30px;
 }

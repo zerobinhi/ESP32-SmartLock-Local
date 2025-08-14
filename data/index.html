@@ -144,6 +144,14 @@
             </div>
         </div>
     </div>
+
+    <div class="modal" id="success-toast-modal">
+        <div class="modal-content success-content">
+            <div class="success-icon">✓</div>
+            <p id="success-message"></p>
+        </div>
+    </div>
+
     <div class="bottom-nav">
         <a href="javascript:void(0)" class="nav-item active" data-page="home-page">
             <span class="icon">🏠</span>
@@ -195,7 +203,7 @@
                     updateFingerprintData(data.data);
                     break;
                 case 'status':
-                    showAlert(data.message);
+                    showSuccessToast(data.message);
                     break;
                 case 'init_data':
                     // 初始化数据同步
@@ -282,7 +290,7 @@
                 return;
             }
             websocket.send(`save_settings:${wifiName},${wifiPassword},${lockPassword}`);
-            showAlert('设置已保存');
+            showSuccessToast('设置已保存'); // 改用成功提示
         }
         // 显示提示弹窗
         function showAlert(message) {
@@ -290,6 +298,19 @@
             const alertMessage = document.getElementById('alert-message');
             alertMessage.textContent = message;
             alertModal.style.display = 'flex';
+        }
+        function showSuccessToast(message) {
+            const successModal = document.getElementById('success-toast-modal');
+            const successMessage = document.getElementById('success-message');
+
+            successMessage.textContent = message;
+
+            successModal.style.display = 'flex';
+
+            // 3秒后自动关闭
+            setTimeout(() => {
+                successModal.style.display = 'none';
+            }, 3000);
         }
         // 页面导航控制
         const Navigation = {
@@ -338,8 +359,6 @@
                 // 卡号管理按钮 - 修改添加卡片逻辑
                 document.getElementById('add-card').addEventListener('click', () => {
                     websocket.send('add_card');
-                    // 新增：添加卡片数据
-                    // this.addNewCard();
                 });
                 document.getElementById('empty-card').addEventListener('click', () => {
                     this.showDeleteConfirm('card', null, 'clear');
@@ -350,8 +369,6 @@
                 // 指纹管理按钮 - 修改添加指纹逻辑
                 document.getElementById('add-fingerprint').addEventListener('click', () => {
                     websocket.send('add_fingerprint');
-                    // 新增：添加指纹数据
-                    // this.addNewFingerprint();
                 });
                 document.getElementById('empty-fingerprint').addEventListener('click', () => {
                     this.showDeleteConfirm('fingerprint', null, 'clear');
@@ -359,32 +376,6 @@
                 document.getElementById('refresh-fingerprints').addEventListener('click', () => {
                     websocket.send('refresh_fingerprints');
                 });
-            },
-            // 新增：添加新卡片
-            addNewCard() {
-                // 生成随机卡号（格式示例：8位十六进制）
-                const randomCardId = Math.floor(Math.random() * 0xFFFFFFF).toString(16).toUpperCase().padStart(8, '0');
-                const cardId = cardData.length + 1;
-                // 添加到数据数组
-                cardData.push({
-                    id: cardId,
-                    cardNumber: randomCardId,
-                });
-                // 更新显示
-                this.updateCardList();
-                this.updateCardCount();
-            },
-            // 新增：添加新指纹
-            addNewFingerprint() {
-                const fingerprintId = fingerprintData.length + 1;
-                // 添加到数据数组
-                fingerprintData.push({
-                    id: fingerprintId,
-                    templateId: fingerprintId,
-                });
-                // 更新显示
-                this.updateFingerprintList();
-                this.updateFingerprintCount();
             },
             // 新增：更新卡片列表显示
             updateCardList() {
@@ -402,17 +393,18 @@
                     return;
                 }
 
-                // 添加列表项
-                cardData.forEach(card => {
+                // 遍历卡片数据，用索引生成连续显示序号（id从1开始）
+                cardData.forEach((card, index) => {
                     const item = document.createElement('div');
                     item.className = 'list-item';
+                    // 显示序号为索引+1，删除按钮传入实际卡号（cardNumber）
                     item.innerHTML = `
-                        <div class="content">
-                            <span>卡片 #${card.id}</span>
-                            <span style="font-size: 0.8rem; color: #666;">卡号: ${card.cardNumber}</span>
-                        </div>
-                        <button class="delete-btn" onclick="Modal.showDeleteConfirm('card', ${card.id})">删除</button>
-                    `;
+                <div class="content">
+                    <span>卡片 #${index + 1}</span>
+                    <span style="font-size: 0.8rem; color: #666;">卡号: ${card.cardNumber}</span>
+                </div>
+                <button class="delete-btn" onclick="Modal.showDeleteConfirm('card', '${card.cardNumber}')">删除</button>
+            `;
                     container.appendChild(item);
                 });
             },
@@ -432,17 +424,18 @@
                     return;
                 }
 
-                // 添加列表项
-                fingerprintData.forEach(fingerprint => {
+                // 遍历指纹数据，用索引生成连续显示序号（id从1开始）
+                fingerprintData.forEach((fingerprint, index) => {
                     const item = document.createElement('div');
                     item.className = 'list-item';
+                    // 显示序号为索引+1，删除按钮传入实际模板ID（templateId）
                     item.innerHTML = `
-                        <div class="content">
-                            <span>指纹 #${fingerprint.id}</span>
-                            <span style="font-size: 0.8rem; color: #666;">模板ID: ${fingerprint.templateId}</span>
-                        </div>
-                        <button class="delete-btn" onclick="Modal.showDeleteConfirm('fingerprint', ${fingerprint.id})">删除</button>
-                    `;
+                <div class="content">
+                    <span>指纹 #${index + 1}</span> <!-- 显示序号：连续排列 -->
+                    <span style="font-size: 0.8rem; color: #666;">模板ID: ${fingerprint.templateId}</span> <!-- 实际标识 -->
+                </div>
+                <button class="delete-btn" onclick="Modal.showDeleteConfirm('fingerprint', ${fingerprint.templateId})">删除</button>
+            `;
                     container.appendChild(item);
                 });
             },
@@ -484,23 +477,27 @@
                         cardData = [];
                         this.updateCardList();
                         this.updateCardCount();
+                        websocket.send('clear_cards'); // 通知ESP32清空卡片
                     } else {
                         fingerprintData = [];
                         this.updateFingerprintList();
                         this.updateFingerprintCount();
+                        websocket.send('clear_fingerprints'); // 通知ESP32清空指纹
                     }
                     const command = this.deleteType === 'card' ? 'clear_cards' : 'clear_fingerprints';
                     websocket.send(command);
                 } else {
                     // 删除单个项目
                     if (this.deleteType === 'card') {
-                        cardData = cardData.filter(item => item.id !== this.itemToDelete);
-                        this.updateCardList();
+                        cardData = cardData.filter(item => item.cardNumber !== this.itemToDelete);
+                        this.updateCardList(); // 重新渲染列表（序号自动更新）
                         this.updateCardCount();
+                        websocket.send(`delete_card:${this.itemToDelete}`); // 通知ESP32删除指定卡片
                     } else {
-                        fingerprintData = fingerprintData.filter(item => item.id !== this.itemToDelete);
-                        this.updateFingerprintList();
+                        fingerprintData = fingerprintData.filter(item => item.templateId !== this.itemToDelete);
+                        this.updateFingerprintList(); // 重新渲染列表（序号自动更新）
                         this.updateFingerprintCount();
+                        websocket.send(`delete_fingerprint:${this.itemToDelete}`); // 通知ESP32删除指定指纹
                     }
                 }
                 this.hideDeleteModal();

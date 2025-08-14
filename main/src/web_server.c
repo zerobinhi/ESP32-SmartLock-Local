@@ -12,9 +12,7 @@ static void send_fingerprint_list(httpd_req_t *req);
 static void send_status_msg(httpd_req_t *req, const char *message);
 
 CardInfo card_list[MAX_CARDS] = {0};
-FingerprintInfo finger_list[MAX_FINGERPRINTS] = {0};
 int card_count = 0;
-int finger_count = 0;
 
 httpd_handle_t server = NULL;
 
@@ -113,7 +111,6 @@ static esp_err_t css_handler(httpd_req_t *req)
 /**
  * WebSocket请求处理器 - 处理按钮命令并打印提示
  */
-// 简化后的WebSocket处理器
 static esp_err_t ws_handler(httpd_req_t *req)
 {
     // 对于旧版本ESP-IDF，不需要显式调用httpd_ws_upgrade
@@ -184,21 +181,21 @@ static esp_err_t ws_handler(httpd_req_t *req)
     {
         ESP_LOGI(TAG, "处理添加指纹命令");
         // 检查是否还有空间
-        if (finger_count < MAX_FINGERPRINTS)
-        {
-            // 模拟添加指纹
-            FingerprintInfo new_finger = {
-                .id = finger_count + 1,
-                .templateId = finger_count + 100 // 示例模板ID
-            };
-            finger_list[finger_count++] = new_finger;
-            send_fingerprint_list(req); // 发送更新后的指纹列表
-            send_status_msg(req, "指纹添加成功");
-        }
-        else
-        {
-            send_status_msg(req, "指纹数量已达上限");
-        }
+        //     if (finger_count < MAX_FINGERPRINTS)
+        //     {
+        //         // 模拟添加指纹
+        //         FingerprintInfo new_finger = {
+        //             .id = finger_count + 1,
+        //             .templateId = finger_count + 100 // 示例模板ID
+        //         };
+        //         finger_list[finger_count++] = new_finger;
+        //         send_fingerprint_list(req); // 发送更新后的指纹列表
+        //         send_status_msg(req, "指纹添加成功");
+        //     }
+        //     else
+        //     {
+        //         send_status_msg(req, "指纹数量已达上限");
+        //     }
     }
     else if (strcmp(recv_buf, "clear_cards") == 0)
     {
@@ -211,10 +208,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
     else if (strcmp(recv_buf, "clear_fingerprints") == 0)
     {
         ESP_LOGI(TAG, "处理清空指纹命令");
-        finger_count = 0;
-        memset(finger_list, 0, sizeof(finger_list));
-        send_fingerprint_list(req);
-        send_status_msg(req, "指纹已清空");
     }
     else if (strcmp(recv_buf, "refresh_cards") == 0)
     {
@@ -226,11 +219,23 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "处理刷新指纹命令");
         send_fingerprint_list(req);
     }
+    else if (strstr(recv_buf, "delete_fingerprint:") != NULL)
+    {
+        char *prefix = "delete_fingerprint:";
+        int fingerprintId = atoi(recv_buf + strlen(prefix));
+
+        ESP_LOGI(TAG, "处理删除指定指纹命令，ID: %d", fingerprintId);
+
+        // delete_char(fingerprintId, 1);
+
+        // send_status_msg(req, "删除指定指纹命令");
+    }
     else if (ws_pkt.len > 0)
     {
         ESP_LOGI(TAG, "收到未知命令: %s", recv_buf);
         send_status_msg(req, "未知命令");
     }
+
     return ESP_OK;
 }
 /**
@@ -250,7 +255,7 @@ static esp_err_t ws_send_json(httpd_req_t *req, cJSON *json)
     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
     ws_pkt.payload = (uint8_t *)json_str;
     ws_pkt.len = strlen(json_str);
-
+    ESP_LOGI(TAG, "发送的消息为: %s", json_str);
     esp_err_t ret = httpd_ws_send_frame(req, &ws_pkt);
     free(json_str); // 释放JSON字符串内存
     return ret;
@@ -285,11 +290,10 @@ static void send_fingerprint_list(httpd_req_t *req)
     cJSON *root = cJSON_CreateObject();
     cJSON *data_array = cJSON_CreateArray();
 
-    for (int i = 0; i < finger_count; i++)
+    for (int i = 0; i < zw111.fingerNumber; i++)
     {
         cJSON *item = cJSON_CreateObject();
-        cJSON_AddNumberToObject(item, "id", finger_list[i].id);
-        cJSON_AddNumberToObject(item, "templateId", finger_list[i].templateId);
+        cJSON_AddNumberToObject(item, "templateId", (int)zw111.fingerIDArray[i]);
         cJSON_AddItemToArray(data_array, item);
     }
 
@@ -330,11 +334,10 @@ static void send_init_data(httpd_req_t *req)
     }
 
     // 添加指纹数据
-    for (int i = 0; i < finger_count; i++)
+    for (int i = 0; i < zw111.fingerNumber; i++)
     {
         cJSON *item = cJSON_CreateObject();
-        cJSON_AddNumberToObject(item, "id", finger_list[i].id);
-        cJSON_AddNumberToObject(item, "templateId", finger_list[i].templateId);
+        cJSON_AddNumberToObject(item, "templateId", zw111.fingerIDArray[i]);
         cJSON_AddItemToArray(fingers_array, item);
     }
 

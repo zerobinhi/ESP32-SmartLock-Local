@@ -372,7 +372,7 @@ static esp_err_t control_colorful_led(uint8_t startColor, uint8_t timeBit, uint8
  * @param count 删除数量（1-100，需确保不超出ID范围）
  * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=参数无效或组装失败
  */
-static esp_err_t delete_char(uint16_t ID, uint16_t count) // 修正函数名拼写错误（delet→delete）
+esp_err_t delete_char(uint16_t ID, uint16_t count)
 {
     // 参数合法性检查
     if (ID >= 100)
@@ -403,17 +403,24 @@ static esp_err_t delete_char(uint16_t ID, uint16_t count) // 修正函数名拼�
     frame[14] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[15] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-    // 调试输出帧信息
-    printf("发送删除指纹帧: ");
-    for (uint8_t i = 0; i < sizeof(frame); i++)
+#if DEBUG
+    ESP_LOGI(TAG, "发送删除指纹帧: ");
+    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
+#endif
+    if (uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame)) == -1)
     {
-        printf("%02X ", frame[i]);
+#if DEBUG
+        ESP_LOGE(TAG, "删除指纹指令发送失败");
+#endif
+        return ESP_FAIL;
     }
-    printf("\n");
-
-    // 实际应用中需添加UART发送逻辑
-    // return uart_write_bytes(EX_UART_NUM, (const char*)frame, sizeof(frame));
-    return ESP_OK;
+    else
+    {
+#if DEBUG
+        ESP_LOGI(TAG, "删除指纹指令发送成功");
+#endif
+        return ESP_OK;
+    }
 }
 
 /**
@@ -639,6 +646,24 @@ static esp_err_t fingerprint_parse_frame(const uint8_t *recvData, uint16_t dataL
 
     return ESP_OK;
 }
+
+void turn_on_fingerprint()
+{
+    gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给ZW101供电
+    zw111.power = true;
+#if DEBUG
+    ESP_LOGI(TAG, "指纹模块已供电");
+#endif
+}
+
+void turn_off_fingerprint()
+{
+    gpio_set_level(FINGERPRINT_CTL_PIN, 1);
+    zw111.power = false; // 关闭指纹模块供电
+#if DEBUG
+    ESP_LOGI(TAG, "指纹模块已断电");
+#endif
+}
 /**
  * @brief 初始化指纹模块UART通信
  * @return esp_err_t ESP_OK=初始化成功，ESP_FAIL=数据无效或初始化失败
@@ -680,8 +705,8 @@ esp_err_t fingerprint_initialization()
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_ENABLE,
         .intr_type = GPIO_INTR_POSEDGE};
-
     gpio_config(&zw101_int_gpio_config);
+
     gpio_config_t fingerprint_ctl_gpio_config = {
         .pin_bit_mask = (1ULL << FINGERPRINT_CTL_PIN),
         .mode = GPIO_MODE_OUTPUT,
@@ -703,17 +728,17 @@ esp_err_t fingerprint_initialization()
 // 指纹任务
 void fingerprint_task(void *pvParameters)
 {
-    gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给ZW101供电
-    zw111.power = true;
+    turn_on_fingerprint(); // 打开指纹模块供电
+
     while (1)
     {
-        gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给ZW101供电
-        vTaskDelay(pdMS_TO_TICKS(1000));        // 等待1秒
-        read_index_table(0);                    // 读取第0页索引表
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 给ZW101断电
-        zw111.state = 0X00;                    // 切换为初始状态
-        vTaskDelay(pdMS_TO_TICKS(1000));        // 等待1秒
+        // gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给ZW101供电
+        // vTaskDelay(pdMS_TO_TICKS(1000));        // 等待1秒
+        // read_index_table(0);                    // 读取第0页索引表
+        // vTaskDelay(pdMS_TO_TICKS(2000));
+        // gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 给ZW101断电
+        // zw111.state = 0X00;                    // 切换为初始状态
+        vTaskDelay(pdMS_TO_TICKS(10000000)); // 等待1秒
     }
 }
 
@@ -732,7 +757,7 @@ void uart_task(void *pvParameters)
             {
             case UART_DATA:
 
-                if (zw111.state == 0X01) // 读索引表状态
+                if (zw111.state == 0X01 && event.size > 0) // 读索引表状态
                 {
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
 #if DEBUG
