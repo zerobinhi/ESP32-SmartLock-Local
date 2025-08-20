@@ -3,6 +3,7 @@
 
 #include "driver/uart.h"
 #include "driver/gpio.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 #include "app_config.h"
@@ -53,6 +54,7 @@
 #define LED_GR 0x06    // 绿+红灯
 #define LED_ALL 0x07   // 红+绿+蓝全亮
 
+// ========================== 数据结构定义 ==========================
 struct fingerprint_device
 {
     /**
@@ -82,8 +84,13 @@ struct fingerprint_device
     uint8_t fingerNumber;
 };
 
+extern bool g_readyAddFingerprint;
+extern bool g_readyDeleteFingerprint;
+extern bool g_readyDeleteAllFingerprint;
+
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);
+void buzzer_task(void *pvParameters);
 esp_err_t fingerprint_initialization();
 esp_err_t delete_char(uint16_t ID, uint16_t count);
 

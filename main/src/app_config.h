@@ -5,7 +5,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
-#define DEBUG 1
+#define DEBUG
 
 #define INDEX_HTML_BUFFER_SIZE 32768
 #define RESPONSE_DATA_BUFFER_SIZE 32768

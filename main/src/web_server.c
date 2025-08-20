@@ -13,6 +13,10 @@ static void send_status_msg(httpd_req_t *req, const char *message);
 
 CardInfo card_list[MAX_CARDS] = {0};
 int card_count = 0;
+// 标志位，进行操作的时候指纹模块可能处在关机状态，也可能在验证指纹状态
+bool g_readyAddFingerprint = false;
+bool g_readyDeleteFingerprint = false;
+bool g_readyDeleteAllFingerprint = false;
 
 httpd_handle_t server = NULL;
 
@@ -204,6 +208,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         memset(card_list, 0, sizeof(card_list));
         send_card_list(req);
         send_status_msg(req, "卡片已清空");
+
     }
     else if (strcmp(recv_buf, "clear_fingerprints") == 0)
     {
