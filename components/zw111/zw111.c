@@ -21,8 +21,9 @@ static uint16_t calculate_checksum(const uint8_t *frameData, uint16_t frameLen)
 {
     if (frameData == NULL || frameLen <= CHECKSUM_START_INDEX + CHECKSUM_LEN)
     {
-        printf("校验和计算失败：无效参数（帧长%d，最小需%d）\n",
-               frameLen, CHECKSUM_START_INDEX + CHECKSUM_LEN + 1);
+#ifdef DEBUG
+        ESP_LOGE(TAG, "校验和计算失败：数据为空或长度不足（需大于%d字节，当前%d字节）", CHECKSUM_START_INDEX + CHECKSUM_LEN, frameLen);
+#endif
         return 0;
     }
 
@@ -34,21 +35,21 @@ static uint16_t calculate_checksum(const uint8_t *frameData, uint16_t frameLen)
         checksum += frameData[i];
     }
 
-    return checksum;
+    return (checksum & 0xFFFF);
 }
 
 /**
  * @brief 校验指纹模块接收数据的有效性（重点验证帧结构和校验和）
  * @param recvData 接收的数据包缓冲区（需非空）
  * @param dataLen 实际接收的字节数（必须显式传入，不可用strlen计算）
- * @return esp_err_t 校验结果：ESP_OK=有效数据，ESP_FAIL=无效数据
+ * @return esp_err_t 校验结果：ESP_OK=数据是有效的，ESP_FAIL=数据是无效的
  */
 static esp_err_t verify_received_data(const uint8_t *recvData, uint16_t dataLen)
 {
     // 基础合法性检查
     if (recvData == NULL || dataLen < MIN_RESPONSE_LEN)
     {
-#if DEBUG
+#ifdef DEBUG
         ESP_LOGE(TAG, "校验失败：数据为空或长度不足（最小需%d字节，当前%d字节）", MIN_RESPONSE_LEN, dataLen);
 #endif
         return ESP_FAIL;
@@ -57,7 +58,7 @@ static esp_err_t verify_received_data(const uint8_t *recvData, uint16_t dataLen)
     // 验证帧头（前2字节）
     if (recvData[0] != FRAME_HEADER[0] || recvData[1] != FRAME_HEADER[1])
     {
-#if DEBUG
+#ifdef DEBUG
         ESP_LOGE(TAG, "校验失败：帧头不匹配（期望%02X%02X，实际%02X%02X）", FRAME_HEADER[0], FRAME_HEADER[1], recvData[0], recvData[1]);
 #endif
         return ESP_FAIL;
@@ -68,7 +69,7 @@ static esp_err_t verify_received_data(const uint8_t *recvData, uint16_t dataLen)
     {
         if (recvData[i] != zw111.deviceAddress[i - 2])
         {
-#if DEBUG
+#ifdef DEBUG
             ESP_LOGE(TAG, "校验失败：设备地址不匹配（期望%02X%02X%02X%02X，实际%02X%02X%02X%02X）",
                      zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3],
                      recvData[2], recvData[3], recvData[4], recvData[5]);
@@ -80,7 +81,7 @@ static esp_err_t verify_received_data(const uint8_t *recvData, uint16_t dataLen)
     // 验证包标识（第6字节）
     if (recvData[6] != PACKET_RESPONSE)
     {
-#if DEBUG
+#ifdef DEBUG
         ESP_LOGE(TAG, "校验失败：包标识错误（期望应答包%02X，实际%02X）", PACKET_RESPONSE, recvData[6]);
 #endif
         return ESP_FAIL;
@@ -90,7 +91,7 @@ static esp_err_t verify_received_data(const uint8_t *recvData, uint16_t dataLen)
     uint16_t expectedDataLen = (recvData[7] << 8) | recvData[8]; // 数据区长度
     if (9 + expectedDataLen != dataLen)
     {
-#if DEBUG
+#ifdef DEBUG
         ESP_LOGE(TAG, "校验失败：长度不匹配（期望总长度%u，实际%u）", 9 + expectedDataLen, dataLen);
 #endif
         return ESP_FAIL;
@@ -102,13 +103,13 @@ static esp_err_t verify_received_data(const uint8_t *recvData, uint16_t dataLen)
     if (calculate_checksum(recvData, dataLen) != receivedChecksum)
     {
 
-#if DEBUG
+#ifdef DEBUG
         ESP_LOGE(TAG, "校验失败：校验和不匹配（期望0x%04X，实际0x%04X）", calculate_checksum(recvData, dataLen), receivedChecksum);
 #endif
         return ESP_FAIL;
     }
 
-#if DEBUG
+#ifdef DEBUG
     ESP_LOGI(TAG, "校验成功：数据有效");
 #endif
     return ESP_OK;
@@ -118,14 +119,14 @@ static esp_err_t verify_received_data(const uint8_t *recvData, uint16_t dataLen)
 /**
  * @brief 指纹模块自动注册函数
  * @param ID 指纹ID号（0-99，超出范围返回失败）
- * @param enrollTimes 录入次数（0-5，0和1效果相同，超出返回失败）
+ * @param enrollTimes 录入次数（2-255，超出返回失败）
  * @param ledControl 采图背光灯控制：false=常亮；true=采图成功后熄灭
  * @param preprocess 采图预处理控制：false=不预处理；true=开启预处理
  * @param returnStatus 注册状态返回控制：false=返回状态；true=不返回状态
  * @param allowOverwrite ID覆盖控制：false=不允许覆盖；true=允许覆盖
  * @param allowDuplicate 重复注册控制：false=允许重复；true=禁止重复
  * @param requireRemove 手指离开要求：false=需离开；true=无需离开
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=参数无效或组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
  */
 static esp_err_t auto_enroll(uint16_t ID, uint8_t enrollTimes,
                              bool ledControl, bool preprocess,
@@ -135,12 +136,17 @@ static esp_err_t auto_enroll(uint16_t ID, uint8_t enrollTimes,
     // 参数合法性检查
     if (ID >= 100)
     {
-        printf("注册失败：ID超出范围（需0-99，当前%d）\n", ID);
+        // ID超出范围
+#ifdef DEBUG
+        ESP_LOGE(TAG, "注册失败：ID超出范围（需0-99，当前%d）", ID);
+#endif
         return ESP_FAIL;
     }
-    if (enrollTimes > 5)
+    if (enrollTimes < 2)
     {
-        printf("注册失败：录入次数超出范围（需0-5，当前%d）\n", enrollTimes);
+#ifdef DEBUG
+        ESP_LOGE(TAG, "注册失败：录入次数超出范围（需2-255，当前%d）", enrollTimes);
+#endif
         return ESP_FAIL;
     }
 
@@ -171,17 +177,30 @@ static esp_err_t auto_enroll(uint16_t ID, uint8_t enrollTimes,
     frame[15] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[16] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-    // 调试输出帧信息
-    printf("发送自动注册帧: ");
-    for (uint8_t i = 0; i < sizeof(frame); i++)
-    {
-        printf("%02X ", frame[i]);
-    }
-    printf("\n");
+// 调试输出帧信息
+#ifdef DEBUG
+    ESP_LOGI(TAG, "发送自动注册指令: ");
+    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
+#endif
 
-    // 实际应用中需添加UART发送逻辑（示例）
-    // return uart_write_bytes(EX_UART_NUM, (const char*)frame, sizeof(frame));
-    return ESP_OK;
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
+    {
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
+        ESP_LOGI(TAG, "自动注册指令发送成功");
+#endif
+        return ESP_OK;
+    }
+    else
+    {
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+#endif
+        return ESP_FAIL;
+    }
 }
 
 /**
@@ -191,14 +210,14 @@ static esp_err_t auto_enroll(uint16_t ID, uint8_t enrollTimes,
  * @param ledControl 采图背光灯控制：false=常亮；true=采图成功后熄灭
  * @param preprocess 采图预处理控制：false=不预处理；true=开启预处理
  * @param returnStatus 识别状态返回控制：false=返回状态；true=不返回状态
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=参数无效或组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
  */
 static esp_err_t auto_identify(uint16_t ID, uint8_t scoreLevel, bool ledControl, bool preprocess, bool returnStatus)
 {
 
     if (scoreLevel < 1 || scoreLevel > 5)
     {
-#if DEBUG
+#ifdef DEBUG
         ESP_LOGE(TAG, "自动识别失败：分数等级无效（需1-5，当前%d）", scoreLevel);
 #endif
         return ESP_FAIL;
@@ -228,23 +247,27 @@ static esp_err_t auto_identify(uint16_t ID, uint8_t scoreLevel, bool ledControl,
     frame[15] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[16] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-#if DEBUG
+#ifdef DEBUG
     ESP_LOGI(TAG, "发送自动识别指令: ");
     ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
 #endif
-    if (uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame)) == -1)
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
     {
-#if DEBUG
-        ESP_LOGE(TAG, "指令发送失败");
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
+        ESP_LOGI(TAG, "自动识别指令发送成功");
 #endif
-        return ESP_FAIL;
+        return ESP_OK;
     }
     else
     {
-#if DEBUG
-        ESP_LOGI(TAG, "指令发送成功");
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
 #endif
-        return ESP_OK;
+        return ESP_FAIL;
     }
 }
 
@@ -254,7 +277,7 @@ static esp_err_t auto_identify(uint16_t ID, uint8_t scoreLevel, bool ledControl,
  * @param startColor 起始颜色（bit0-蓝,bit1-绿,bit2-红，参考LED_xxx宏定义）
  * @param endColor 结束颜色（仅功能码1-呼吸灯有效，其他模式忽略）
  * @param cycleTimes 循环次数（仅功能码1-呼吸灯/2-闪烁灯有效，0=无限循环）
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=参数无效或组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
  */
 static esp_err_t control_led(uint8_t functionCode, uint8_t startColor,
                              uint8_t endColor, uint8_t cycleTimes)
@@ -262,19 +285,25 @@ static esp_err_t control_led(uint8_t functionCode, uint8_t startColor,
     // 参数合法性检查
     if (functionCode < BLN_BREATH || functionCode > BLN_FADE_OUT)
     {
-        printf("LED控制失败：功能码无效（需1-6，当前%d）\n", functionCode);
+#ifdef DEBUG
+        ESP_LOGE(TAG, "LED控制失败：功能码无效（需1-6，当前%d）", functionCode);
+#endif
         return ESP_FAIL;
     }
 
     // 过滤颜色参数无效位（仅保留低3位）
     if ((startColor & 0xF8) != 0)
     {
-        printf("LED控制警告：起始颜色仅低3位有效，已过滤为0x%02X\n", startColor & 0x07);
+#ifdef DEBUG
+        ESP_LOGE(TAG, "LED控制警告：起始颜色仅低3位有效，已过滤为0x%02X\n", startColor & 0x07);
+#endif
         startColor &= 0x07;
     }
     if ((endColor & 0xF8) != 0)
     {
-        printf("LED控制警告：结束颜色仅低3位有效，已过滤为0x%02X\n", endColor & 0x07);
+#ifdef DEBUG
+        ESP_LOGE(TAG, "LED控制警告：结束颜色仅低3位有效，已过滤为0x%02X\n", endColor & 0x07);
+#endif
         endColor &= 0x07;
     }
 
@@ -297,17 +326,30 @@ static esp_err_t control_led(uint8_t functionCode, uint8_t startColor,
     frame[14] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[15] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-    // 调试输出帧信息
-    printf("发送LED控制帧: ");
-    for (uint8_t i = 0; i < sizeof(frame); i++)
-    {
-        printf("%02X ", frame[i]);
-    }
-    printf("\n");
+// 调试输出帧信息
+#ifdef DEBUG
+    ESP_LOGI(TAG, "发送LED控制帧: ");
+    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
+#endif
 
-    // 实际应用中需添加UART发送逻辑
-    // return uart_write_bytes(EX_UART_NUM, (const char*)frame, sizeof(frame));
-    return ESP_OK;
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
+    {
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
+        ESP_LOGI(TAG, "LED控制指令发送成功");
+#endif
+        return ESP_OK;
+    }
+    else
+    {
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+#endif
+        return ESP_FAIL;
+    }
 }
 
 /**
@@ -315,21 +357,25 @@ static esp_err_t control_led(uint8_t functionCode, uint8_t startColor,
  * @param startColor 起始颜色配置（参考LED_xxx宏定义，仅低3位有效）
  * @param timeBit 呼吸周期时间参数（1-100，对应0.1秒-10秒）
  * @param cycleTimes 循环次数（0=无限循环）
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=参数无效或组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
  */
 static esp_err_t control_colorful_led(uint8_t startColor, uint8_t timeBit, uint8_t cycleTimes)
 {
     // 参数合法性检查
     if (timeBit < 1 || timeBit > 100)
     {
-        printf("跑马灯控制失败：时间参数无效（需1-100，当前%d）\n", timeBit);
+#ifdef DEBUG
+        ESP_LOGE(TAG, "跑马灯控制失败：时间参数无效（需1-100，当前%d）", timeBit);
+#endif
         return ESP_FAIL;
     }
 
     // 过滤颜色参数无效位
     if ((startColor & 0xF8) != 0)
     {
-        printf("跑马灯控制警告：起始颜色仅低3位有效，已过滤为0x%02X\n", startColor & 0x07);
+#ifdef DEBUG
+        ESP_LOGE(TAG, "跑马灯控制失败：起始颜色仅低3位有效，已过滤为0x%02X\n", startColor & 0x07);
+#endif
         startColor &= 0x07;
     }
 
@@ -353,36 +399,55 @@ static esp_err_t control_colorful_led(uint8_t startColor, uint8_t timeBit, uint8
     frame[15] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[16] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-    // 调试输出帧信息
-    printf("发送跑马灯控制帧: ");
-    for (uint8_t i = 0; i < sizeof(frame); i++)
-    {
-        printf("%02X ", frame[i]);
-    }
-    printf("\n");
+// 调试输出帧信息
+#ifdef DEBUG
+    ESP_LOGI(TAG, "发送跑马灯控制帧: ");
+    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
+#endif
 
-    // 实际应用中需添加UART发送逻辑
-    // return uart_write_bytes(EX_UART_NUM, (const char*)frame, sizeof(frame));
-    return ESP_OK;
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
+    {
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
+        ESP_LOGI(TAG, "跑马灯控制指令发送成功");
+#endif
+        return ESP_OK;
+    }
+    else
+    {
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+#endif
+        return ESP_FAIL;
+    }
 }
 
 /**
  * @brief 删除指定数量的指纹（从指定ID开始连续删除）
  * @param ID 起始指纹ID（0-99，超出范围返回失败）
  * @param count 删除数量（1-100，需确保不超出ID范围）
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=参数无效或组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
  */
 esp_err_t delete_char(uint16_t ID, uint16_t count)
 {
     // 参数合法性检查
     if (ID >= 100)
     {
-        printf("删除失败：起始ID超出范围（需0-99，当前%d）\n", ID);
+        // ID超出范围
+#ifdef DEBUG
+        ESP_LOGE(TAG, "删除失败：起始ID超出范围（需0-99，当前%d）", ID);
+#endif
         return ESP_FAIL;
     }
     if (count == 0 || count > 100 || (ID + count) > 100)
     {
-        printf("删除失败：数量无效（需1-100且不超出ID范围，当前数量%d）\n", count);
+#ifdef DEBUG
+        ESP_LOGE(TAG, "删除失败：数量无效（需1-100且不超出ID范围，当前数量%d）", count);
+#endif
+        // 数量无效或超出ID范围
         return ESP_FAIL;
     }
 
@@ -403,29 +468,34 @@ esp_err_t delete_char(uint16_t ID, uint16_t count)
     frame[14] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[15] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-#if DEBUG
+#ifdef DEBUG
     ESP_LOGI(TAG, "发送删除指纹帧: ");
     ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
 #endif
-    if (uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame)) == -1)
+
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
     {
-#if DEBUG
-        ESP_LOGE(TAG, "删除指纹指令发送失败");
-#endif
-        return ESP_FAIL;
-    }
-    else
-    {
-#if DEBUG
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
         ESP_LOGI(TAG, "删除指纹指令发送成功");
 #endif
         return ESP_OK;
+    }
+    else
+    {
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+#endif
+        return ESP_FAIL;
     }
 }
 
 /**
  * @brief 清空模块中所有已注册的指纹
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
  */
 static esp_err_t empty()
 {
@@ -445,21 +515,34 @@ static esp_err_t empty()
     frame[11] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
     // 调试输出帧信息
-    printf("发送清空所有指纹帧: ");
-    for (uint8_t i = 0; i < sizeof(frame); i++)
-    {
-        printf("%02X ", frame[i]);
-    }
-    printf("\n");
+#ifdef DEBUG
+    ESP_LOGI(TAG, "发送清空指纹帧: ");
+    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
+#endif
 
-    // 实际应用中需添加UART发送逻辑
-    // return uart_write_bytes(EX_UART_NUM, (const char*)frame, sizeof(frame));
-    return ESP_OK;
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
+    {
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
+        ESP_LOGI(TAG, "清空指纹指令发送成功");
+#endif
+        return ESP_OK;
+    }
+    else
+    {
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+#endif
+        return ESP_FAIL;
+    }
 }
 
 /**
  * @brief 取消模块当前正在执行的操作（如注册、识别等）
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
  */
 static esp_err_t cancel()
 {
@@ -478,22 +561,35 @@ static esp_err_t cancel()
     frame[10] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[11] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-    // 调试输出帧信息
-    printf("发送取消操作帧: ");
-    for (uint8_t i = 0; i < sizeof(frame); i++)
-    {
-        printf("%02X ", frame[i]);
-    }
-    printf("\n");
+// 调试输出帧信息
+#ifdef DEBUG
+    ESP_LOGI(TAG, "发送取消操作帧: ");
+    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
+#endif
 
-    // 实际应用中需添加UART发送逻辑
-    // return uart_write_bytes(EX_UART_NUM, (const char*)frame, sizeof(frame));
-    return ESP_OK;
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
+    {
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
+        ESP_LOGI(TAG, "取消操作指令发送成功");
+#endif
+        return ESP_OK;
+    }
+    else
+    {
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+#endif
+        return ESP_FAIL;
+    }
 }
 
 /**
  * @brief 控制模块进入休眠模式（降低功耗，需外部唤醒）
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
  */
 static esp_err_t sleep()
 {
@@ -512,29 +608,42 @@ static esp_err_t sleep()
     frame[10] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[11] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-    // 调试输出帧信息
-    printf("发送休眠指令帧: ");
-    for (uint8_t i = 0; i < sizeof(frame); i++)
-    {
-        printf("%02X ", frame[i]);
-    }
-    printf("\n");
+// 调试输出帧信息
+#ifdef DEBUG
+    ESP_LOGI(TAG, "发送休眠指令帧: ");
+    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
+#endif
 
-    // 实际应用中需添加UART发送逻辑
-    // return uart_write_bytes(EX_UART_NUM, (const char*)frame, sizeof(frame));
-    return ESP_OK;
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
+    {
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
+        ESP_LOGI(TAG, "休眠指令发送成功");
+#endif
+        return ESP_OK;
+    }
+    else
+    {
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+#endif
+        return ESP_FAIL;
+    }
 }
 
 /**
  * @brief 读取模块中的指纹索引表（获取已注册指纹ID）
  * @param page 页码（0-4，每页对应20枚指纹，共100枚）
- * @return esp_err_t 操作结果：ESP_OK=帧组装成功，ESP_FAIL=参数无效或组装失败
+ * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
  */
 static esp_err_t read_index_table(uint8_t page)
 {
     if (page > 4)
     {
-#if DEBUG
+#ifdef DEBUG
         ESP_LOGE(TAG, "页码无效（需0-4，当前%d）", page);
 #endif
         return ESP_FAIL;
@@ -555,40 +664,38 @@ static esp_err_t read_index_table(uint8_t page)
     frame[11] = (uint8_t)(checksum >> 8);   // 校验和高字节
     frame[12] = (uint8_t)(checksum & 0xFF); // 校验和低字节
 
-#if DEBUG
+#ifdef DEBUG
     ESP_LOGI(TAG, "读取索引表: ");
     ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
 #endif
-    if (uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame)) == -1)
+    // UART发送命令
+    int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
+    if (len == sizeof(frame))
     {
-#if DEBUG
-        ESP_LOGE(TAG, "指令发送失败");
+        // 发送成功（所有字节都被推入FIFO）
+#ifdef DEBUG
+        ESP_LOGI(TAG, "读取索引表指令发送成功");
 #endif
-        return ESP_FAIL;
+        return ESP_OK;
     }
     else
     {
-#if DEBUG
-        ESP_LOGI(TAG, "指令发送成功");
+        // 发送失败（参数错误或未全部发送）
+#ifdef DEBUG
+        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
 #endif
-        return ESP_OK;
+        return ESP_FAIL;
     }
 }
 
 /**
  * @brief 解析读索引表命令的返回数据，提取已注册指纹ID
- * @param recvData 接收的数据包缓冲区（需通过verify_received_data校验）
+ * @param recvData 接收的数据包缓冲区
  * @param dataLen 实际接收的字节数（需显式传入）
  * @return esp_err_t 解析结果：ESP_OK=解析成功，ESP_FAIL=数据无效或解析失败
  */
 static esp_err_t fingerprint_parse_frame(const uint8_t *recvData, uint16_t dataLen)
 {
-    // 先校验数据有效性
-    if (verify_received_data(recvData, dataLen) != ESP_OK)
-    {
-        return ESP_FAIL;
-    }
-
     // 初始化指纹ID数组（0xFF表示未使用）
     memset(zw111.fingerIDArray, 0xFF, sizeof(zw111.fingerIDArray));
     zw111.fingerNumber = 0;
@@ -627,7 +734,7 @@ static esp_err_t fingerprint_parse_frame(const uint8_t *recvData, uint16_t dataL
     // 更新有效指纹数量
     zw111.fingerNumber = tempCount;
 
-#if DEBUG
+#ifdef DEBUG
 
     if (zw111.fingerNumber > 0)
     {
@@ -646,24 +753,69 @@ static esp_err_t fingerprint_parse_frame(const uint8_t *recvData, uint16_t dataL
 
     return ESP_OK;
 }
+/**
+ * @brief 模块取消当前的操作并关机
+ * @note 该函数会取消当前正在进行的指纹操作（如注册、识别等），并将状态设置为取消状态
+ * @return void
+ */
 
+static void cancel_current_operation_and_shutdown()
+{
+    // 发送取消命令
+    if (cancel() == ESP_OK)
+    {
+        zw111.state = 0x0A; // 切换为取消状态
+#ifdef DEBUG
+        ESP_LOGI(TAG, "准备取消当前操作，模块状态已切换为取消状态");
+#endif
+    }
+    else
+    {
+        // 取消操作失败
+#ifdef DEBUG
+        ESP_LOGE(TAG, "取消当前操作失败");
+#endif
+    }
+}
+
+/**
+ * @brief 打开指纹模块
+ * @note 该函数会给指纹模块供电，并设置状态为已供电
+ * @return void
+ */
 void turn_on_fingerprint()
 {
-    gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给ZW101供电
+    gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给指纹模块供电
     zw111.power = true;
-#if DEBUG
+#ifdef DEBUG
     ESP_LOGI(TAG, "指纹模块已供电");
 #endif
 }
 
-void turn_off_fingerprint()
+/**
+ * @brief 模块准备关闭
+ * @note 该函数会准备关闭指纹模块，发送休眠命令并设置状态为休眠
+ * @return void
+ */
+void prepare_turn_off_fingerprint()
 {
-    gpio_set_level(FINGERPRINT_CTL_PIN, 1);
-    zw111.power = false; // 关闭指纹模块供电
-#if DEBUG
-    ESP_LOGI(TAG, "指纹模块已断电");
+    // 发送休眠命令
+    if (sleep() == ESP_OK)
+    {
+        zw111.state = 0x0B; // 切换为休眠状态
+#ifdef DEBUG
+        ESP_LOGI(TAG, "准备休眠，模块状态已切换为休眠状态");
 #endif
+    }
+    else
+    {
+        // 休眠操作失败
+#ifdef DEBUG
+        ESP_LOGE(TAG, "休眠当前操作失败");
+#endif
+    }
 }
+
 /**
  * @brief 初始化指纹模块UART通信
  * @return esp_err_t ESP_OK=初始化成功，ESP_FAIL=数据无效或初始化失败
@@ -719,7 +871,7 @@ esp_err_t fingerprint_initialization()
     xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
     xTaskCreate(fingerprint_task, "fingerprint_task", 8192, NULL, 10, NULL);
 
-#if DEBUG
+#ifdef DEBUG
     ESP_LOGI(TAG, "fingerprint device created");
 #endif
     return ESP_OK;
@@ -738,7 +890,8 @@ void fingerprint_task(void *pvParameters)
         // vTaskDelay(pdMS_TO_TICKS(2000));
         // gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 给ZW101断电
         // zw111.state = 0X00;                    // 切换为初始状态
-        vTaskDelay(pdMS_TO_TICKS(10000000)); // 等待1秒
+        vTaskDelay(pdMS_TO_TICKS(10000));       // 等待10秒
+        gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给ZW101供电
     }
 }
 
@@ -757,14 +910,75 @@ void uart_task(void *pvParameters)
             {
             case UART_DATA:
 
-                if (zw111.state == 0X01 && event.size > 0) // 读索引表状态
+                if (zw111.state == 0X01 && event.size > 40) // 读索引表状态
                 {
+                    // 先接受数据
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-#if DEBUG
-                    ESP_LOG_BUFFER_HEX(TAG, dtmp, event.size); // 打印接收到的数据46个字节
+                    // 再验证收到的数据是否有效
+                    if (verify_received_data(dtmp, event.size) != ESP_OK)
+                    {
+#ifdef DEBUG
+                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
 #endif
-                    ESP_LOGI(TAG, "接收到索引表数据，长度: %d", event.size); // 这里显示44个字节
-                    fingerprint_parse_frame(dtmp, event.size);               // 解析指纹索引表数据
+                        break; // 丢弃无效数据
+                    }
+#ifdef DEBUG
+                    ESP_LOGI(TAG, "接收到索引表数据，长度: %d", event.size);
+#endif
+                    fingerprint_parse_frame(dtmp, event.size); // 解析指纹索引表数据
+                    prepare_turn_off_fingerprint();            // 准备关闭指纹模块
+                }
+                else if (zw111.state == 0X02) // 注册指纹状态
+                {
+                }
+                else if (zw111.state == 0X03) // 删除指纹状态
+                {
+                }
+                else if (zw111.state == 0X04) // 验证指纹状态
+                {
+                }
+                else if (zw111.state == 0X0A && event.size == 12) // 取消状态
+                {
+                    // 先接受数据
+                    uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
+                    // 再验证收到的数据是否有效
+                    if (verify_received_data(dtmp, event.size) != ESP_OK)
+                    {
+#ifdef DEBUG
+                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
+#endif
+                        break; // 丢弃无效数据
+                    }
+
+                    if (dtmp[9] == 0x00) // 确认码=00H 表示取消操作成功
+                    {
+                        prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+#ifdef DEBUG
+                        ESP_LOGI(TAG, "取消操作成功，状态已切换为休眠状态");
+#endif
+                    }
+                }
+                else if (zw111.state == 0X0B && event.size == 12) // 休眠状态
+                {
+                    // 先接受数据
+                    uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
+                    // 再验证收到的数据是否有效
+                    if (verify_received_data(dtmp, event.size) != ESP_OK)
+                    {
+#ifdef DEBUG
+                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
+#endif
+                        break; // 丢弃无效数据
+                    }
+                    if (dtmp[9] == 0x00) // 确认码=00H 表示休眠设置成功
+                    {
+                        gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 断开指纹模块供电
+                        zw111.power = false;                    // 设置供电状态为false
+                        zw111.state = 0X00;                     // 切换为初始状态
+#ifdef DEBUG
+                        ESP_LOGI(TAG, "指纹模块已断电，状态已重置为初始状态");
+#endif
+                    }
                 }
                 break;
             case UART_PATTERN_DET:
@@ -786,7 +1000,7 @@ void uart_task(void *pvParameters)
                     uart_read_bytes(EX_UART_NUM, pat, 1, 100 / portTICK_PERIOD_MS);
                     if (pat[0] == 0X55)
                     {
-#if DEBUG
+#ifdef DEBUG
                         ESP_LOGI(TAG, "pat[0] == 0X55 ZW101就绪,state: %d", zw111.state);
 #endif
                         if (zw111.state == 0X00) // 刚开机的状态
