@@ -93,5 +93,9 @@ void uart_task(void *pvParameters);
 void buzzer_task(void *pvParameters);
 esp_err_t fingerprint_initialization();
 esp_err_t delete_char(uint16_t ID, uint16_t count);
+void turn_on_fingerprint();
+void prepare_turn_off_fingerprint();
+
+
 
 #endif // ZW111_H_

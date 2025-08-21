@@ -21,5 +21,7 @@ typedef struct {
 #define MAX_CARDS 20
  
 httpd_handle_t web_server_start(void);
+void send_fingerprint_list(httpd_req_t *req);
+void send_init_data(httpd_req_t *req);
 
 #endif // WEB_SERVER_H

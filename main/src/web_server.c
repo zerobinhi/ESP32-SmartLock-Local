@@ -6,9 +6,7 @@ char response_data[RESPONSE_DATA_BUFFER_SIZE];
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
-static void send_init_data(httpd_req_t *req);
 static void send_card_list(httpd_req_t *req);
-static void send_fingerprint_list(httpd_req_t *req);
 static void send_status_msg(httpd_req_t *req, const char *message);
 
 CardInfo card_list[MAX_CARDS] = {0};
@@ -183,23 +181,20 @@ static esp_err_t ws_handler(httpd_req_t *req)
     }
     else if (strcmp(recv_buf, "add_fingerprint") == 0)
     {
+#ifdef DEBUG
         ESP_LOGI(TAG, "处理添加指纹命令");
+#endif
+
         // 检查是否还有空间
-        //     if (finger_count < MAX_FINGERPRINTS)
-        //     {
-        //         // 模拟添加指纹
-        //         FingerprintInfo new_finger = {
-        //             .id = finger_count + 1,
-        //             .templateId = finger_count + 100 // 示例模板ID
-        //         };
-        //         finger_list[finger_count++] = new_finger;
-        //         send_fingerprint_list(req); // 发送更新后的指纹列表
-        //         send_status_msg(req, "指纹添加成功");
-        //     }
-        //     else
-        //     {
-        //         send_status_msg(req, "指纹数量已达上限");
-        //     }
+        if (zw111.fingerNumber < 100)
+        {
+            zw111.state = 0x02;    // 设置状态为注册指纹状态
+            turn_on_fingerprint(); // 开机！
+        }
+        else
+        {
+            send_status_msg(req, "指纹数量已达上限");
+        }
     }
     else if (strcmp(recv_buf, "clear_cards") == 0)
     {
@@ -208,7 +203,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
         memset(card_list, 0, sizeof(card_list));
         send_card_list(req);
         send_status_msg(req, "卡片已清空");
-
     }
     else if (strcmp(recv_buf, "clear_fingerprints") == 0)
     {
@@ -290,7 +284,7 @@ static void send_card_list(httpd_req_t *req)
 /**
  * 发送指纹列表
  */
-static void send_fingerprint_list(httpd_req_t *req)
+void send_fingerprint_list(httpd_req_t *req)
 {
     cJSON *root = cJSON_CreateObject();
     cJSON *data_array = cJSON_CreateArray();
@@ -323,7 +317,7 @@ static void send_status_msg(httpd_req_t *req, const char *message)
 /**
  * 发送初始化数据
  */
-static void send_init_data(httpd_req_t *req)
+void send_init_data(httpd_req_t *req)
 {
     cJSON *root = cJSON_CreateObject();
     cJSON *cards_array = cJSON_CreateArray();

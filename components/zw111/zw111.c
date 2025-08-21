@@ -763,6 +763,81 @@ static esp_err_t fingerprint_parse_frame(const uint8_t *recvData, uint16_t dataL
     return ESP_OK;
 }
 /**
+ * 在指纹列表中查找最小未使用序号并返回其序号
+ * @return 最小未使用的指纹ID，无可用ID时返回-1
+ */
+uint8_t get_mini_unused_id()
+{
+    // 特殊情况：没有任何指纹，直接返回0
+    if (zw111.fingerNumber == 0)
+    {
+        return 0;
+    }
+
+    // 检查0是否被使用（数组从0开始，但ID可能不从0开始）
+    if (zw111.fingerIDArray[0] > 0)
+    {
+        return 0;
+    }
+
+    // 遍历已排序的ID数组，查找连续序列中的空缺
+    for (uint8_t i = 0; i < zw111.fingerNumber - 1; i++)
+    {
+        // 当前ID和下一个ID之间存在空缺
+        if (zw111.fingerIDArray[i + 1] > zw111.fingerIDArray[i] + 1)
+        {
+            return zw111.fingerIDArray[i] + 1;
+        }
+    }
+
+    // 所有已有ID是连续的，返回最后一个ID的下一个值
+    uint8_t last_id = zw111.fingerIDArray[zw111.fingerNumber - 1];
+    if (last_id + 1 < 100) // 确保不超过最大支持的ID范围
+    {
+        return last_id + 1;
+    }
+
+    // 所有可能的ID都已使用
+    return 100;
+}
+
+/**
+ * 插入新注册的指纹ID到数组中，保持数组有序性
+ * @param new_id 要插入的新指纹ID（应通过get_mini_unused_id()获取）
+ * @return 成功插入返回0，失败返回-1（数组已满）
+ */
+esp_err_t insert_fingerprint_id(uint8_t new_id)
+{
+    // 检查数组是否已满
+    if (zw111.fingerNumber >= 100)
+    {
+        return ESP_FAIL; // 达到最大容量，无法插入
+    }
+
+    // 找到插入位置
+    int insert_pos = 0;
+    while (insert_pos < zw111.fingerNumber &&
+           zw111.fingerIDArray[insert_pos] < new_id)
+    {
+        insert_pos++;
+    }
+
+    // 移动元素为新ID腾出位置
+    for (int i = zw111.fingerNumber; i > insert_pos; i--)
+    {
+        zw111.fingerIDArray[i] = zw111.fingerIDArray[i - 1];
+    }
+
+    // 插入新ID
+    zw111.fingerIDArray[insert_pos] = new_id;
+
+    // 更新指纹数量
+    zw111.fingerNumber++;
+
+    return ESP_OK; // 插入成功
+}
+
+/**
  * @brief 模块取消当前的操作并关机
  * @note 该函数会取消当前正在进行的指纹操作（如注册、识别等），并将状态设置为取消状态
  * @return void
@@ -1144,9 +1219,192 @@ void uart_task(void *pvParameters)
                     fingerprint_parse_frame(dtmp, event.size); // 解析指纹索引表数据
                     prepare_turn_off_fingerprint();            // 准备关闭指纹模块
                 }
-                // if (zw111.state == 0X02 && event.size == 19) // 注册指纹状态
-                // {
-                // }
+                if (zw111.state == 0X02 && event.size == 14) // 注册指纹状态
+                {
+                    // 先接受数据
+                    uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
+                    // 再验证收到的数据是否有效
+                    if (verify_received_data(dtmp, event.size) != ESP_OK)
+                    {
+#ifdef DEBUG
+                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
+#endif
+                        break; // 丢弃无效数据
+                    }
+                    if (dtmp[10] == 0x00 && dtmp[11] == 0x00)
+                    {
+                        if (dtmp[9] == 0x00)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-命令执行成功，等待图像采集");
+#endif
+                        }
+                        else if (dtmp[9] == 0x22)
+                        {
+#ifdef DEBUG
+                            ESP_LOGE(TAG, "注册指纹-当前ID已被使用，请选择其他ID");
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                        else
+                        {
+#ifdef DEBUG
+                            ESP_LOGE(TAG, "注册指纹-未知数据，丢弃");
+                            // 打印接收到的未知数据
+                            ESP_LOG_BUFFER_HEX(TAG, dtmp, event.size);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                    }
+                    else if (dtmp[10] == 0x01)
+                    {
+                        if (dtmp[9] == 0x00)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-第%d次采图成功", dtmp[11]);
+#endif
+                        }
+                        else if (dtmp[9] == 0x26)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-第%d次采图超时", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                        else
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-第%d次采图失败", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                    }
+                    else if (dtmp[10] == 0x02)
+                    {
+
+                        if (dtmp[9] == 0x00)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-第%d次生成特征成功", dtmp[11]);
+#endif
+                        }
+                        else if (dtmp[9] == 0x26)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-第%d次生成特征超时", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                        else
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-第%d次采图失败", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                    }
+                    else if (dtmp[10] == 0x03)
+                    {
+
+                        if (dtmp[9] == 0x00)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-手指第%d次离开，录入成功", dtmp[11]);
+#endif
+                        }
+                        else if (dtmp[9] == 0x26)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-手指第%d次离开，录入超时", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+
+                        else
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-手指第%d次离开，录入失败", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                    }
+                    else if (dtmp[10] == 0x04 && dtmp[11] == 0xF0)
+                    {
+
+                        if (dtmp[9] == 0x00)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-合并模板成功", dtmp[11]);
+#endif
+                        }
+                        else if (dtmp[9] == 0x26)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-合并模板超时", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+
+                        else
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-合并模板失败", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                    }
+                    else if (dtmp[10] == 0x05 && dtmp[11] == 0xF1)
+                    {
+
+                        if (dtmp[9] == 0x00)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-已注册检测通过");
+#endif
+                        }
+                        else if (dtmp[9] == 0x26)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-已注册检测超时");
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                        else
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-已注册检测失败", dtmp[11]);
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                    }
+                    else if (dtmp[10] == 0x06 && dtmp[11] == 0xF2)
+                    {
+
+                        if (dtmp[9] == 0x00)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-模板存储成功，id:%d", get_mini_unused_id());
+#endif
+                            insert_fingerprint_id(get_mini_unused_id());
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                        else if (dtmp[9] == 0x26)
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-模板存储超时");
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                        else
+                        {
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "注册指纹-模板存储失败");
+#endif
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        }
+                    }
+                }
+
                 // if (zw111.state == 0X03 && event.size == 19) // 删除指纹状态
                 // {
                 // }
@@ -1183,18 +1441,34 @@ void uart_task(void *pvParameters)
                                  : zw111.state == 0x0B ? "休眠状态"
                                                        : "未知状态");
 #endif
-                        if (zw111.state == 0X00) // 刚开机的状态
-                        {
-                            zw111.state = 0X01; // 切换为读索引表状态
-                            read_index_table(0);
-                        }
-                        else if (zw111.state == 0X04) // 验证指纹状态
+
+                        if (zw111.state == 0X04) // 验证指纹状态
                         {
                             // 发送验证指纹命令
                             if (auto_identify(0xFFFF, 2, false, false, false) != ESP_OK)
                             {
 #ifdef DEBUG
                                 ESP_LOGE(TAG, "验证指纹命令发送失败");
+#endif
+                                cancel_current_operation_and_shutdown(); // 取消当前操作并关机
+                            }
+                        }
+                        else if (zw111.state == 0X00) // 刚开机的状态
+                        {
+                            zw111.state = 0X01; // 切换为读索引表状态
+                            read_index_table(0);
+                        }
+                        else if (zw111.state == 0X02) // 注册指纹状态
+                        {
+
+#ifdef DEBUG
+                            ESP_LOGI(TAG, "指纹模块处于注册状态，准备注册指纹");
+#endif
+                            // 发送注册指纹命令
+                            if (auto_enroll(get_mini_unused_id(), 5, false, false, false, false, true, false) != ESP_OK)
+                            {
+#ifdef DEBUG
+                                ESP_LOGE(TAG, "注册指纹命令发送失败");
 #endif
                                 cancel_current_operation_and_shutdown(); // 取消当前操作并关机
                             }
