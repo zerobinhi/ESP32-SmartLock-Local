@@ -851,17 +851,17 @@ esp_err_t fingerprint_initialization()
         .source_clk = UART_SCLK_DEFAULT,
     };
     // Install UART driver, and get the queue.
-    uart_driver_install(EX_UART_NUM, 1024 * 2, 1024 * 2, 20, &uart2_queue, 0);
+    uart_driver_install(EX_UART_NUM, 1024, 1024, 5, &uart2_queue, 0);
     uart_param_config(EX_UART_NUM, &uart_config);
 
     // Set UART pins (using UART0 default pins ie no changes.)
     uart_set_pin(EX_UART_NUM, FINGERPRINT_RX_PIN, FINGERPRINT_TX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
     // Set uart pattern detect function.
-    uart_enable_pattern_det_baud_intr(EX_UART_NUM, 0x55, 1, 500, 500, 500);
+    uart_enable_pattern_det_baud_intr(EX_UART_NUM, 0x55, 1, 9, 20, 0);
 
-    // Reset the pattern queue length to record at most 20 pattern positions.
-    uart_pattern_queue_reset(EX_UART_NUM, 20);
+    // Reset the pattern queue length to record at most 5 pattern positions.
+    uart_pattern_queue_reset(EX_UART_NUM, 5);
 
     // 初始化指纹模块数据结构
     zw111.deviceAddress[0] = 0xFF;
@@ -960,13 +960,15 @@ void fingerprint_task(void *pvParameters)
             ESP_LOGI(TAG, "指纹模块已准备就绪，开始处理任务");
             // 打印模块当前状态
             ESP_LOGI(TAG, "指纹模块状态: %s", zw111.power ? "已供电" : "未供电");
-            ESP_LOGI(TAG, "指纹模块状态: %s", zw111.state == 0x00 ? "初始状态" : zw111.state == 0x01 ? "读索引表状态"
-                                                                             : zw111.state == 0x02   ? "注册指纹状态"
-                                                                             : zw111.state == 0x03   ? "删除指纹状态"
-                                                                             : zw111.state == 0x04   ? "验证指纹状态"
-                                                                             : zw111.state == 0x0A   ? "取消状态"
-                                                                             : zw111.state == 0x0B   ? "休眠状态"
-                                                                                                     : "未知状态");
+            ESP_LOGI(TAG, "指纹模块状态: %s",
+                     zw111.state == 0x00   ? "初始状态"
+                     : zw111.state == 0x01 ? "读索引表状态"
+                     : zw111.state == 0x02 ? "注册指纹状态"
+                     : zw111.state == 0x03 ? "删除指纹状态"
+                     : zw111.state == 0x04 ? "验证指纹状态"
+                     : zw111.state == 0x0A ? "取消状态"
+                     : zw111.state == 0x0B ? "休眠状态"
+                                           : "未知状态");
             ESP_LOGI(TAG, "指纹模块设备地址: %02X:%02X:%02X:%02X",
                      zw111.deviceAddress[0], zw111.deviceAddress[1],
                      zw111.deviceAddress[2], zw111.deviceAddress[3]);
@@ -1003,7 +1005,7 @@ void uart_task(void *pvParameters)
             switch (event.type)
             {
             case UART_DATA:
-                if (zw111.state == 0X01 && event.size == 44) // 读索引表状态
+                if (zw111.state == 0X0B && event.size == 12) // 休眠状态
                 {
                     // 先接受数据
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
@@ -1015,19 +1017,17 @@ void uart_task(void *pvParameters)
 #endif
                         break; // 丢弃无效数据
                     }
+                    if (dtmp[9] == 0x00) // 确认码=00H 表示休眠设置成功
+                    {
+                        gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 断开指纹模块供电
+                        zw111.power = false;                    // 设置供电状态为false
+                        zw111.state = 0X00;                     // 切换为初始状态
 #ifdef DEBUG
-                    ESP_LOGI(TAG, "接收到索引表数据，长度: %d", event.size);
+                        ESP_LOGI(TAG, "指纹模块已断电，状态已重置为初始状态");
 #endif
-                    fingerprint_parse_frame(dtmp, event.size); // 解析指纹索引表数据
-                    prepare_turn_off_fingerprint();            // 准备关闭指纹模块
+                    }
                 }
-                // if (zw111.state == 0X02 && event.size == 19) // 注册指纹状态
-                // {
-                // }
-                // if (zw111.state == 0X03 && event.size == 19) // 删除指纹状态
-                // {
-                // }
-                if (zw111.state == 0X04 && event.size == 17) // 验证指纹状态
+                else if (zw111.state == 0X0A && event.size == 12) // 取消状态
                 {
                     // 先接受数据
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
@@ -1039,7 +1039,28 @@ void uart_task(void *pvParameters)
 #endif
                         break; // 丢弃无效数据
                     }
-                     if (dtmp[10] == 0x00 && dtmp[9] == 0x00)
+
+                    if (dtmp[9] == 0x00) // 确认码=00H 表示取消操作成功
+                    {
+                        prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+#ifdef DEBUG
+                        ESP_LOGI(TAG, "取消操作成功，状态已切换为休眠状态");
+#endif
+                    }
+                }
+                else if (zw111.state == 0X04 && event.size == 17) // 验证指纹状态
+                {
+                    // 先接受数据
+                    uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
+                    // 再验证收到的数据是否有效
+                    if (verify_received_data(dtmp, event.size) != ESP_OK)
+                    {
+#ifdef DEBUG
+                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
+#endif
+                        break; // 丢弃无效数据
+                    }
+                    if (dtmp[10] == 0x00 && dtmp[9] == 0x00)
                     {
 #ifdef DEBUG
                         ESP_LOGI(TAG, "验证指纹-命令执行成功，等待图像采集");
@@ -1087,11 +1108,10 @@ void uart_task(void *pvParameters)
                             xQueueSend(xQueue_buzzer, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
                         }
                     }
-
                     else if (dtmp[10] == 0x02 && dtmp[9] == 0x09)
                     {
 #ifdef DEBUG
-                        ESP_LOGW(TAG, "验证指纹-没搜索到指纹");
+                        ESP_LOGW(TAG, "验证指纹-传感器上没有手指");
 #endif
                         xQueueSend(xQueue_buzzer, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
                     }
@@ -1106,7 +1126,7 @@ void uart_task(void *pvParameters)
                         prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                     }
                 }
-                if (zw111.state == 0X0A && event.size == 12) // 取消状态
+                else if (zw111.state == 0X01 && event.size == 44) // 读索引表状态
                 {
                     // 先接受数据
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
@@ -1118,37 +1138,18 @@ void uart_task(void *pvParameters)
 #endif
                         break; // 丢弃无效数据
                     }
-
-                    if (dtmp[9] == 0x00) // 确认码=00H 表示取消操作成功
-                    {
-                        prepare_turn_off_fingerprint(); // 准备关闭指纹模块
 #ifdef DEBUG
-                        ESP_LOGI(TAG, "取消操作成功，状态已切换为休眠状态");
+                    ESP_LOGI(TAG, "接收到索引表数据，长度: %d", event.size);
 #endif
-                    }
+                    fingerprint_parse_frame(dtmp, event.size); // 解析指纹索引表数据
+                    prepare_turn_off_fingerprint();            // 准备关闭指纹模块
                 }
-                if (zw111.state == 0X0B && event.size == 12) // 休眠状态
-                {
-                    // 先接受数据
-                    uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-                    // 再验证收到的数据是否有效
-                    if (verify_received_data(dtmp, event.size) != ESP_OK)
-                    {
-#ifdef DEBUG
-                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
-#endif
-                        break; // 丢弃无效数据
-                    }
-                    if (dtmp[9] == 0x00) // 确认码=00H 表示休眠设置成功
-                    {
-                        gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 断开指纹模块供电
-                        zw111.power = false;                    // 设置供电状态为false
-                        zw111.state = 0X00;                     // 切换为初始状态
-#ifdef DEBUG
-                        ESP_LOGI(TAG, "指纹模块已断电，状态已重置为初始状态");
-#endif
-                    }
-                }
+                // if (zw111.state == 0X02 && event.size == 19) // 注册指纹状态
+                // {
+                // }
+                // if (zw111.state == 0X03 && event.size == 19) // 删除指纹状态
+                // {
+                // }
                 break;
             case UART_PATTERN_DET:
                 uart_get_buffered_data_len(EX_UART_NUM, &buffered_size);
@@ -1165,20 +1166,22 @@ void uart_task(void *pvParameters)
                 }
                 else
                 {
-                    uart_read_bytes(EX_UART_NUM, dtmp, pos, pdMS_TO_TICKS(1000));
+                    uart_read_bytes(EX_UART_NUM, dtmp, pos, pdMS_TO_TICKS(100));
                     uint8_t pat[2];
                     memset(pat, 0, sizeof(pat));
-                    uart_read_bytes(EX_UART_NUM, pat, 1, pdMS_TO_TICKS(1000));
+                    uart_read_bytes(EX_UART_NUM, pat, 1, pdMS_TO_TICKS(100));
                     if (pat[0] == 0X55)
                     {
 #ifdef DEBUG
-                        ESP_LOGI(TAG, "指纹模块刚上电，状态: %s", zw111.state == 0x00 ? "初始状态" : zw111.state == 0x01 ? "读索引表状态"
-                                                                                                 : zw111.state == 0x02   ? "注册指纹状态"
-                                                                                                 : zw111.state == 0x03   ? "删除指纹状态"
-                                                                                                 : zw111.state == 0x04   ? "验证指纹状态"
-                                                                                                 : zw111.state == 0x0A   ? "取消状态"
-                                                                                                 : zw111.state == 0x0B   ? "休眠状态"
-                                                                                                                         : "未知状态");
+                        ESP_LOGI(TAG, "指纹模块刚上电，状态: %s",
+                                 zw111.state == 0x00   ? "初始状态"
+                                 : zw111.state == 0x01 ? "读索引表状态"
+                                 : zw111.state == 0x02 ? "注册指纹状态"
+                                 : zw111.state == 0x03 ? "删除指纹状态"
+                                 : zw111.state == 0x04 ? "验证指纹状态"
+                                 : zw111.state == 0x0A ? "取消状态"
+                                 : zw111.state == 0x0B ? "休眠状态"
+                                                       : "未知状态");
 #endif
                         if (zw111.state == 0X00) // 刚开机的状态
                         {
