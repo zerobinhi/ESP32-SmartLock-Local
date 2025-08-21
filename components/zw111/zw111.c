@@ -858,7 +858,7 @@ esp_err_t fingerprint_initialization()
     uart_set_pin(EX_UART_NUM, FINGERPRINT_RX_PIN, FINGERPRINT_TX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
     // Set uart pattern detect function.
-    uart_enable_pattern_det_baud_intr(EX_UART_NUM, 0x55, 1, 1, 100, 100);
+    uart_enable_pattern_det_baud_intr(EX_UART_NUM, 0x55, 1, 500, 500, 500);
 
     // Reset the pattern queue length to record at most 20 pattern positions.
     uart_pattern_queue_reset(EX_UART_NUM, 20);
@@ -996,15 +996,14 @@ void uart_task(void *pvParameters)
     static uint8_t dtmp[1024];
     while (1)
     {
-        if (xQueueReceive(uart2_queue, (void *)&event, (TickType_t)portMAX_DELAY) == pdPASS)
+        if (xQueueReceive(uart2_queue, (void *)&event, (TickType_t)portMAX_DELAY))
         {
             bzero(dtmp, 1024);
             size_t buffered_size;
             switch (event.type)
             {
             case UART_DATA:
-                event.type = UART_PATTERN_DET;   // 将数据事件转换为模式检测事件           
-                if (zw111.state == 0X01 && event.size > 40) // 读索引表状态
+                if (zw111.state == 0X01 && event.size == 44) // 读索引表状态
                 {
                     // 先接受数据
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
@@ -1022,13 +1021,13 @@ void uart_task(void *pvParameters)
                     fingerprint_parse_frame(dtmp, event.size); // 解析指纹索引表数据
                     prepare_turn_off_fingerprint();            // 准备关闭指纹模块
                 }
-                // else if (zw111.state == 0X02 && event.size == 19) // 注册指纹状态
+                // if (zw111.state == 0X02 && event.size == 19) // 注册指纹状态
                 // {
                 // }
-                // else if (zw111.state == 0X03 && event.size == 19) // 删除指纹状态
+                // if (zw111.state == 0X03 && event.size == 19) // 删除指纹状态
                 // {
                 // }
-                else if (zw111.state == 0X04 && event.size == 17) // 验证指纹状态
+                if (zw111.state == 0X04 && event.size == 17) // 验证指纹状态
                 {
                     // 先接受数据
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
@@ -1040,8 +1039,13 @@ void uart_task(void *pvParameters)
 #endif
                         break; // 丢弃无效数据
                     }
-
-                    if (dtmp[10] == 0x01)
+                     if (dtmp[10] == 0x00 && dtmp[9] == 0x00)
+                    {
+#ifdef DEBUG
+                        ESP_LOGI(TAG, "验证指纹-命令执行成功，等待图像采集");
+#endif
+                    }
+                    else if (dtmp[10] == 0x01)
                     {
                         if (dtmp[9] == 0x00)
 #ifdef DEBUG
@@ -1083,21 +1087,26 @@ void uart_task(void *pvParameters)
                             xQueueSend(xQueue_buzzer, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
                         }
                     }
-                    else if (dtmp[10] == 0x01 && dtmp[9] == 0x00)
+
+                    else if (dtmp[10] == 0x02 && dtmp[9] == 0x09)
                     {
 #ifdef DEBUG
-                        ESP_LOGI(TAG, "验证指纹-获取图像成功");
+                        ESP_LOGW(TAG, "验证指纹-没搜索到指纹");
 #endif
+                        xQueueSend(xQueue_buzzer, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
                     }
                     else
                     {
 #ifdef DEBUG
                         ESP_LOGE(TAG, "验证指纹-未知数据，丢弃");
+                        // 打印接收到的未知数据
+                        ESP_LOG_BUFFER_HEX(TAG, dtmp, event.size);
+
 #endif
                         prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                     }
                 }
-                else if (zw111.state == 0X0A && event.size == 12) // 取消状态
+                if (zw111.state == 0X0A && event.size == 12) // 取消状态
                 {
                     // 先接受数据
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
@@ -1118,7 +1127,7 @@ void uart_task(void *pvParameters)
 #endif
                     }
                 }
-                else if (zw111.state == 0X0B && event.size == 12) // 休眠状态
+                if (zw111.state == 0X0B && event.size == 12) // 休眠状态
                 {
                     // 先接受数据
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
@@ -1156,14 +1165,20 @@ void uart_task(void *pvParameters)
                 }
                 else
                 {
-                    uart_read_bytes(EX_UART_NUM, dtmp, pos, 100 / portTICK_PERIOD_MS);
+                    uart_read_bytes(EX_UART_NUM, dtmp, pos, pdMS_TO_TICKS(1000));
                     uint8_t pat[2];
                     memset(pat, 0, sizeof(pat));
-                    uart_read_bytes(EX_UART_NUM, pat, 1, 100 / portTICK_PERIOD_MS);
+                    uart_read_bytes(EX_UART_NUM, pat, 1, pdMS_TO_TICKS(1000));
                     if (pat[0] == 0X55)
                     {
 #ifdef DEBUG
-                        ESP_LOGI(TAG, "pat[0] == 0X55 ZW101就绪,state: %d", zw111.state);
+                        ESP_LOGI(TAG, "指纹模块刚上电，状态: %s", zw111.state == 0x00 ? "初始状态" : zw111.state == 0x01 ? "读索引表状态"
+                                                                                                 : zw111.state == 0x02   ? "注册指纹状态"
+                                                                                                 : zw111.state == 0x03   ? "删除指纹状态"
+                                                                                                 : zw111.state == 0x04   ? "验证指纹状态"
+                                                                                                 : zw111.state == 0x0A   ? "取消状态"
+                                                                                                 : zw111.state == 0x0B   ? "休眠状态"
+                                                                                                                         : "未知状态");
 #endif
                         if (zw111.state == 0X00) // 刚开机的状态
                         {
@@ -1173,7 +1188,7 @@ void uart_task(void *pvParameters)
                         else if (zw111.state == 0X04) // 验证指纹状态
                         {
                             // 发送验证指纹命令
-                            if (auto_identify(0xFFFF, 2, false, true, true) != ESP_OK)
+                            if (auto_identify(0xFFFF, 2, false, false, false) != ESP_OK)
                             {
 #ifdef DEBUG
                                 ESP_LOGE(TAG, "验证指纹命令发送失败");
@@ -1181,11 +1196,12 @@ void uart_task(void *pvParameters)
                                 cancel_current_operation_and_shutdown(); // 取消当前操作并关机
                             }
                         }
-
-                    default:
-                        break;
                     }
                 }
+                break;
+
+            default:
+                break;
             }
         }
     }
