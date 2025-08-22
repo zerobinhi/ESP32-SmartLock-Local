@@ -1,6 +1,11 @@
 #include "spiffs.h"
+#include "esp_log.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 static const char *TAG = "SmartLock SPIFFS";
+
 void spiffs_init_and_load_webpage(void)
 {
     esp_vfs_spiffs_conf_t conf = {
@@ -11,30 +16,50 @@ void spiffs_init_and_load_webpage(void)
     esp_err_t ret = esp_vfs_spiffs_register(&conf);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "SPIFFS注册失败 (%s)", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "SPIFFS 注册失败 (%s)", esp_err_to_name(ret));
         return;
     }
 
-    // 检查并加载index.html
-    memset(index_html, 0, sizeof(index_html));
+    // 动态分配缓冲区
+    if (!index_html)
+    {
+        index_html = malloc(INDEX_HTML_BUFFER_SIZE);
+        if (!index_html)
+        {
+            ESP_LOGE(TAG, "index_html 缓冲区分配失败");
+            return;
+        }
+    }
+    if (!response_data)
+    {
+        response_data = malloc(RESPONSE_DATA_BUFFER_SIZE);
+        if (!response_data)
+        {
+            ESP_LOGE(TAG, "response_data 缓冲区分配失败");
+            return;
+        }
+    }
+
+    // 检查并加载 index.html
+
     struct stat st;
     if (stat(INDEX_HTML_PATH, &st) != 0)
     {
-        ESP_LOGE(TAG, "SPIFFS中未找到index.html");
+        ESP_LOGE(TAG, "SPIFFS 中未找到 index.html");
         return;
     }
 
-    if (st.st_size >= sizeof(index_html))
+    if (st.st_size >= INDEX_HTML_BUFFER_SIZE)
     {
-        ESP_LOGE(TAG, "index.html文件过大 (大小: %ld, 缓冲区: %ld)",
-                 st.st_size, sizeof(index_html));
+        ESP_LOGE(TAG, "index.html 文件过大 (大小: %ld, 缓冲区: %d)",
+                 st.st_size, INDEX_HTML_BUFFER_SIZE);
         return;
     }
 
     FILE *fp = fopen(INDEX_HTML_PATH, "r");
     if (!fp)
     {
-        ESP_LOGE(TAG, "打开index.html失败");
+        ESP_LOGE(TAG, "打开 index.html 失败");
         return;
     }
 
@@ -43,11 +68,12 @@ void spiffs_init_and_load_webpage(void)
 
     if (bytes_read != st.st_size)
     {
-        ESP_LOGE(TAG, "读取index.html失败 (已读: %ld, 预期: %ld)",
+        ESP_LOGE(TAG, "读取 index.html 失败 (已读: %ld, 预期: %ld)",
                  bytes_read, st.st_size);
     }
     else
     {
-        ESP_LOGI(TAG, "index.html加载成功 (大小: %ld)", st.st_size);
+        index_html[bytes_read] = '\0'; // ✅ 确保字符串结尾
+        ESP_LOGI(TAG, "index.html 加载成功 (大小: %ld)", st.st_size);
     }
 }

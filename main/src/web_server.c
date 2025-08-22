@@ -1,7 +1,7 @@
 #include "web_server.h"
 
-char index_html[INDEX_HTML_BUFFER_SIZE];
-char response_data[RESPONSE_DATA_BUFFER_SIZE];
+char *index_html;
+char *response_data;
 
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
