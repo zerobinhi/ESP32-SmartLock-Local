@@ -1432,7 +1432,7 @@ void uart_task(void *pvParameters)
 #endif
 
                             insert_fingerprint_id(get_mini_unused_id());
-                            // broadcast_fingerprint_list();
+                            send_fingerprint_list();
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else if (dtmp[9] == 0x26)

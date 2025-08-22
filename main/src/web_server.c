@@ -5,8 +5,6 @@ char *index_html;
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
-static void send_card_list(httpd_req_t *req);
-static void send_status_msg(httpd_req_t *req, const char *message);
 
 CardInfo card_list[MAX_CARDS] = {0};
 int card_count = 0;
@@ -18,6 +16,10 @@ bool g_readyDeleteAllFingerprint = false;
 uint8_t g_deleteFingerprintID = 0;
 
 httpd_handle_t server = NULL;
+
+// 保存已连接客户端 fd
+static int ws_clients[MAX_WS_CLIENTS] = {0};
+static int ws_client_count = 0;
 
 static const char *TAG = "SmartLock Web Server";
 
@@ -122,20 +124,30 @@ static esp_err_t css_handler(httpd_req_t *req)
  */
 static esp_err_t ws_handler(httpd_req_t *req)
 {
-    // 对于旧版本ESP-IDF，不需要显式调用httpd_ws_upgrade
-    // 只需验证是否为WebSocket连接
     if (req->method == HTTP_GET)
     {
         ESP_LOGI(TAG, "客户端尝试建立WebSocket连接");
-        send_init_data(req);
+
+        // 保存客户端 fd
+        int fd = httpd_req_to_sockfd(req);
+        if (ws_client_count < MAX_WS_CLIENTS)
+        {
+            ws_clients[ws_client_count++] = fd;
+            ESP_LOGI(TAG, "新客户端加入，fd=%d，总数=%d", fd, ws_client_count);
+        }
+
+        send_init_data();
         return ESP_OK;
     }
 
-    // 接收WebSocket数据
+    // 接收数据
     httpd_ws_frame_t ws_pkt;
     char recv_buf[WS_RECV_BUFFER_SIZE] = {0};
     memset(&ws_pkt, 0, sizeof(ws_pkt));
     ws_pkt.payload = (uint8_t *)recv_buf;
+    // ws_pkt.len = sizeof(recv_buf);
+
+    // esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, sizeof(recv_buf));
 
     // 先接收帧头
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
@@ -178,12 +190,12 @@ static esp_err_t ws_handler(httpd_req_t *req)
                 .cardNumber = "1A2B3C4D" // 示例卡号
             };
             card_list[card_count++] = new_card;
-            send_card_list(req); // 发送更新后的卡片列表
-            send_status_msg(req, "卡片添加成功");
+            send_card_list(); // 发送更新后的卡片列表
+            send_status_msg("卡片添加成功");
         }
         else
         {
-            send_status_msg(req, "卡片数量已达上限");
+            send_status_msg("卡片数量已达上限");
         }
     }
     else if (strcmp(recv_buf, "add_fingerprint") == 0)
@@ -209,7 +221,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         }
         else
         {
-            send_status_msg(req, "指纹数量已达上限");
+            send_status_msg("指纹数量已达上限");
         }
     }
     else if (strcmp(recv_buf, "clear_cards") == 0)
@@ -217,8 +229,8 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "处理清空卡片命令");
         card_count = 0;
         memset(card_list, 0, sizeof(card_list));
-        send_card_list(req);
-        send_status_msg(req, "卡片已清空");
+        send_card_list();
+        send_status_msg("卡片已清空");
     }
     else if (strcmp(recv_buf, "clear_fingerprints") == 0)
     {
@@ -240,12 +252,12 @@ static esp_err_t ws_handler(httpd_req_t *req)
     else if (strcmp(recv_buf, "refresh_cards") == 0)
     {
         ESP_LOGI(TAG, "处理刷新卡片命令");
-        send_card_list(req);
+        send_card_list();
     }
     else if (strcmp(recv_buf, "refresh_fingerprints") == 0)
     {
         ESP_LOGI(TAG, "处理刷新指纹命令");
-        send_fingerprint_list(req);
+        send_fingerprint_list();
     }
     else if (strstr(recv_buf, "delete_fingerprint:") != NULL)
     {
@@ -264,20 +276,23 @@ static esp_err_t ws_handler(httpd_req_t *req)
             zw111.state = 0x03;    // 设置状态为删除指纹状态
             turn_on_fingerprint(); // 开机！
         }
-        send_status_msg(req, "删除指定指纹命令");
+        send_status_msg("删除指定指纹命令");
     }
     else if (ws_pkt.len > 0)
     {
         ESP_LOGI(TAG, "收到未知命令: %s", recv_buf);
-        send_status_msg(req, "未知命令");
+        send_status_msg("未知命令");
     }
 
     return ESP_OK;
 }
 /**
- * 向WebSocket客户端发送JSON消息
+ * WebSocket广播JSON
  */
-static esp_err_t ws_send_json(httpd_req_t *req, cJSON *json)
+/**
+ * WebSocket广播JSON
+ */
+static esp_err_t ws_broadcast_json(cJSON *json)
 {
     if (!json)
         return ESP_FAIL;
@@ -286,20 +301,32 @@ static esp_err_t ws_send_json(httpd_req_t *req, cJSON *json)
     if (!json_str)
         return ESP_FAIL;
 
-    httpd_ws_frame_t ws_pkt;
-    memset(&ws_pkt, 0, sizeof(ws_pkt));
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    ws_pkt.payload = (uint8_t *)json_str;
-    ws_pkt.len = strlen(json_str);
-    ESP_LOGI(TAG, "发送的消息为: %s", json_str);
-    esp_err_t ret = httpd_ws_send_frame(req, &ws_pkt);
-    free(json_str); // 释放JSON字符串内存
-    return ret;
+    httpd_ws_frame_t ws_pkt = {
+
+        .type = HTTPD_WS_TYPE_TEXT,
+        .payload = (uint8_t *)json_str,
+        .len = strlen(json_str)};
+
+    ESP_LOGI(TAG, "广播消息: %s", json_str);
+
+    for (int i = 0; i < ws_client_count; i++)
+    {
+        if (httpd_ws_send_frame_async(server, ws_clients[i], &ws_pkt) != ESP_OK)
+        {
+            ESP_LOGW(TAG, "客户端 fd=%d 发送失败，移除", ws_clients[i]);
+            ws_clients[i] = ws_clients[--ws_client_count];
+            i--;
+        }
+    }
+
+    free(json_str);
+    return ESP_OK;
 }
+
 /**
  * 发送卡片列表
  */
-static void send_card_list(httpd_req_t *req)
+void send_card_list()
 {
     cJSON *root = cJSON_CreateObject();
     cJSON *data_array = cJSON_CreateArray();
@@ -314,14 +341,14 @@ static void send_card_list(httpd_req_t *req)
 
     cJSON_AddStringToObject(root, "type", "card_list");
     cJSON_AddItemToObject(root, "data", data_array);
-    ws_send_json(req, root);
+    ws_broadcast_json(root);
     cJSON_Delete(root);
 }
 
 /**
  * 发送指纹列表
  */
-void send_fingerprint_list(httpd_req_t *req)
+void send_fingerprint_list()
 {
     cJSON *root = cJSON_CreateObject();
     cJSON *data_array = cJSON_CreateArray();
@@ -335,26 +362,26 @@ void send_fingerprint_list(httpd_req_t *req)
 
     cJSON_AddStringToObject(root, "type", "fingerprint_list");
     cJSON_AddItemToObject(root, "data", data_array);
-    ws_send_json(req, root);
+    ws_broadcast_json(root);
     cJSON_Delete(root);
 }
 
 /**
  * 发送状态消息
  */
-static void send_status_msg(httpd_req_t *req, const char *message)
+void send_status_msg(const char *message)
 {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "status");
     cJSON_AddStringToObject(root, "message", message);
-    ws_send_json(req, root);
+    ws_broadcast_json(root);
     cJSON_Delete(root);
 }
 
 /**
  * 发送初始化数据
  */
-void send_init_data(httpd_req_t *req)
+void send_init_data()
 {
     cJSON *root = cJSON_CreateObject();
     cJSON *cards_array = cJSON_CreateArray();
@@ -380,6 +407,6 @@ void send_init_data(httpd_req_t *req)
     cJSON_AddStringToObject(root, "type", "init_data");
     cJSON_AddItemToObject(root, "cards", cards_array);
     cJSON_AddItemToObject(root, "fingers", fingers_array);
-    ws_send_json(req, root);
+    ws_broadcast_json(root);
     cJSON_Delete(root);
 }
