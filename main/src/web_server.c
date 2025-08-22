@@ -15,6 +15,7 @@ int card_count = 0;
 bool g_readyAddFingerprint = false;
 bool g_readyDeleteFingerprint = false;
 bool g_readyDeleteAllFingerprint = false;
+uint8_t g_deleteFingerprintID = 0;
 
 httpd_handle_t server = NULL;
 
@@ -182,14 +183,23 @@ static esp_err_t ws_handler(httpd_req_t *req)
     else if (strcmp(recv_buf, "add_fingerprint") == 0)
     {
 #ifdef DEBUG
-        ESP_LOGI(TAG, "处理添加指纹命令");
+        ESP_LOGI(TAG, "处理添加指纹命令, 当前模组状态: %d", zw111.state);
 #endif
 
         // 检查是否还有空间
         if (zw111.fingerNumber < 100)
         {
-            zw111.state = 0x02;    // 设置状态为注册指纹状态
-            turn_on_fingerprint(); // 开机！
+
+            if (zw111.power == true)
+            {
+                cancel_current_operation_and_execute_command();
+                g_readyAddFingerprint = true;
+            }
+            else
+            {
+                zw111.state = 0x02;    // 设置状态为注册指纹状态
+                turn_on_fingerprint(); // 开机！
+            }
         }
         else
         {
@@ -206,7 +216,20 @@ static esp_err_t ws_handler(httpd_req_t *req)
     }
     else if (strcmp(recv_buf, "clear_fingerprints") == 0)
     {
-        ESP_LOGI(TAG, "处理清空指纹命令");
+
+#ifdef DEBUG
+        ESP_LOGI(TAG, "处理清空指纹命令, 当前模组状态: %d", zw111.state);
+#endif
+        g_readyDeleteAllFingerprint = true;
+        if (zw111.power == true)
+        {
+            cancel_current_operation_and_execute_command();
+        }
+        else
+        {
+            zw111.state = 0x03;    // 设置状态为删除指纹状态
+            turn_on_fingerprint(); // 开机！
+        }
     }
     else if (strcmp(recv_buf, "refresh_cards") == 0)
     {
@@ -221,13 +244,21 @@ static esp_err_t ws_handler(httpd_req_t *req)
     else if (strstr(recv_buf, "delete_fingerprint:") != NULL)
     {
         char *prefix = "delete_fingerprint:";
-        int fingerprintId = atoi(recv_buf + strlen(prefix));
-
-        ESP_LOGI(TAG, "处理删除指定指纹命令，ID: %d", fingerprintId);
-
-        // delete_char(fingerprintId, 1);
-
-        // send_status_msg(req, "删除指定指纹命令");
+        g_deleteFingerprintID = atoi(recv_buf + strlen(prefix));
+#ifdef DEBUG
+        ESP_LOGI(TAG, "处理删除指定指纹命令，ID: %d，当前模组状态: %d", g_deleteFingerprintID, zw111.state);
+#endif
+        g_readyDeleteFingerprint = true;
+        if (zw111.power == true)
+        {
+            cancel_current_operation_and_execute_command();
+        }
+        else
+        {
+            zw111.state = 0x03;    // 设置状态为删除指纹状态
+            turn_on_fingerprint(); // 开机！
+        }
+        send_status_msg(req, "删除指定指纹命令");
     }
     else if (ws_pkt.len > 0)
     {

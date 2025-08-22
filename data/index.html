@@ -146,11 +146,12 @@
     </div>
 
     <div class="modal" id="success-toast-modal">
-        <div class="modal-content success-content">
+        <div class="success-toast-box">
             <div class="success-icon">✓</div>
             <p id="success-message"></p>
         </div>
     </div>
+
 
     <div class="bottom-nav">
         <a href="javascript:void(0)" class="nav-item active" data-page="home-page">
@@ -203,7 +204,7 @@
                     updateFingerprintData(data.data);
                     break;
                 case 'status':
-                    showSuccessToast(data.message);
+                    showAlert(data.message);
                     break;
                 case 'init_data':
                     // 初始化数据同步
@@ -290,7 +291,7 @@
                 return;
             }
             websocket.send(`save_settings:${wifiName},${wifiPassword},${lockPassword}`);
-            showSuccessToast('设置已保存'); // 改用成功提示
+            showSuccessToast('设置已保存');
         }
         // 显示提示弹窗
         function showAlert(message) {
@@ -299,19 +300,19 @@
             alertMessage.textContent = message;
             alertModal.style.display = 'flex';
         }
+
         function showSuccessToast(message) {
-            const successModal = document.getElementById('success-toast-modal');
-            const successMessage = document.getElementById('success-message');
+            const modal = document.getElementById('success-toast-modal');
+            const msgEl = document.getElementById('success-message');
+            msgEl.textContent = message;
 
-            successMessage.textContent = message;
+            modal.style.display = 'flex';
 
-            successModal.style.display = 'flex';
-
-            // 3秒后自动关闭
             setTimeout(() => {
-                successModal.style.display = 'none';
+                modal.style.display = 'none';
             }, 3000);
         }
+
         // 页面导航控制
         const Navigation = {
             init() {
@@ -477,12 +478,10 @@
                         cardData = [];
                         this.updateCardList();
                         this.updateCardCount();
-                        websocket.send('clear_cards'); // 通知ESP32清空卡片
                     } else {
                         fingerprintData = [];
                         this.updateFingerprintList();
                         this.updateFingerprintCount();
-                        websocket.send('clear_fingerprints'); // 通知ESP32清空指纹
                     }
                     const command = this.deleteType === 'card' ? 'clear_cards' : 'clear_fingerprints';
                     websocket.send(command);

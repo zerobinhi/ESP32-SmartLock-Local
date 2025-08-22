@@ -399,25 +399,57 @@ input[type="password"]:focus {
     opacity: 0.6;
 }
 
+/* 遮罩背景 */
 #success-toast-modal {
-    background-color: rgba(0, 0, 0, 0.7);
+    display: none;
+    /* 初始隐藏 */
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    background: transparent;
+    /* 无背景 */
 }
 
-.success-content {
-    background-color: #000;
+/* 提示框方块 */
+.success-toast-box {
+    background-color: #3a3a3a;
+    /* 深灰色背景 */
     color: #fff;
     border-radius: 8px;
-    padding: 30px 20px;
+    padding: 20px 15px;
+    width: 100px;
     text-align: center;
-    min-width: 180px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    animation: fadeInScale 0.3s ease-out;
 }
 
+/* 对号 */
 .success-icon {
-    font-size: 48px;
-    margin-bottom: 15px;
-    color: #4CAF50;
+    font-size: 32px;
+    margin-bottom: 8px;
+    color: #fff;
+    /* 白色对号 */
 }
 
-#success-toast-modal .modal-content {
-    padding-bottom: 30px;
+/* 文字 */
+#success-message {
+    font-size: 14px;
+    line-height: 1.4;
+    color: #fff;
+    margin: 0;
+}
+
+/* 弹出动画 */
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }

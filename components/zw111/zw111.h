@@ -87,6 +87,7 @@ struct fingerprint_device
 extern bool g_readyAddFingerprint;
 extern bool g_readyDeleteFingerprint;
 extern bool g_readyDeleteAllFingerprint;
+extern uint8_t g_deleteFingerprintID;
 
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);
@@ -95,7 +96,7 @@ esp_err_t fingerprint_initialization();
 esp_err_t delete_char(uint16_t ID, uint16_t count);
 void turn_on_fingerprint();
 void prepare_turn_off_fingerprint();
-
+void cancel_current_operation_and_execute_command();
 
 
 #endif // ZW111_H_
