@@ -30,15 +30,6 @@ void spiffs_init_and_load_webpage(void)
             return;
         }
     }
-    if (!response_data)
-    {
-        response_data = malloc(RESPONSE_DATA_BUFFER_SIZE);
-        if (!response_data)
-        {
-            ESP_LOGE(TAG, "response_data 缓冲区分配失败");
-            return;
-        }
-    }
 
     // 检查并加载 index.html
 

@@ -1,7 +1,6 @@
 #include "web_server.h"
 
 char *index_html;
-char *response_data;
 
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
@@ -11,6 +10,7 @@ static void send_status_msg(httpd_req_t *req, const char *message);
 
 CardInfo card_list[MAX_CARDS] = {0};
 int card_count = 0;
+
 // 标志位，进行操作的时候指纹模块可能处在关机状态，也可能在验证指纹状态
 bool g_readyAddFingerprint = false;
 bool g_readyDeleteFingerprint = false;
@@ -69,9 +69,15 @@ httpd_handle_t web_server_start(void)
 static esp_err_t root_handler(httpd_req_t *req)
 {
     ESP_LOGI(TAG, "收到主页面请求");
-    sprintf(response_data, index_html);
+
+    if (!index_html)
+    {
+        ESP_LOGE(TAG, "index_html 未加载");
+        return httpd_resp_send_500(req);
+    }
+
     httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, response_data, HTTPD_RESP_USE_STRLEN);
+    return httpd_resp_send(req, index_html, HTTPD_RESP_USE_STRLEN);
 }
 
 /**

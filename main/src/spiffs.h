@@ -8,7 +8,6 @@
 #define INDEX_HTML_PATH "/spiffs/index.html"
 
 extern char *index_html;       // 动态分配缓冲区
-extern char *response_data;
 
 void spiffs_init_and_load_webpage(void);
 
