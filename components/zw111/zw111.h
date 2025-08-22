@@ -88,6 +88,7 @@ extern bool g_readyAddFingerprint;
 extern bool g_readyDeleteFingerprint;
 extern bool g_readyDeleteAllFingerprint;
 extern uint8_t g_deleteFingerprintID;
+extern void broadcast_fingerprint_list();
 
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);

@@ -804,7 +804,7 @@ uint8_t get_mini_unused_id()
 /**
  * 插入新注册的指纹ID到数组中，保持数组有序性
  * @param new_id 要插入的新指纹ID（应通过get_mini_unused_id()获取）
- * @return 成功插入返回0，失败返回-1（数组已满）
+ * @return 成功插入返回ESP_OK，失败返回ESP_FAIL（数组已满）
  */
 esp_err_t insert_fingerprint_id(uint8_t new_id)
 {
@@ -815,7 +815,7 @@ esp_err_t insert_fingerprint_id(uint8_t new_id)
     }
 
     // 找到插入位置
-    int insert_pos = 0;
+    uint8_t insert_pos = 0;
     while (insert_pos < zw111.fingerNumber &&
            zw111.fingerIDArray[insert_pos] < new_id)
     {
@@ -823,7 +823,7 @@ esp_err_t insert_fingerprint_id(uint8_t new_id)
     }
 
     // 移动元素为新ID腾出位置
-    for (int i = zw111.fingerNumber; i > insert_pos; i--)
+    for (uint8_t i = zw111.fingerNumber; i > insert_pos; i--)
     {
         zw111.fingerIDArray[i] = zw111.fingerIDArray[i - 1];
     }
@@ -833,6 +833,10 @@ esp_err_t insert_fingerprint_id(uint8_t new_id)
 
     // 更新指纹数量
     zw111.fingerNumber++;
+
+#ifdef DEBUG
+    ESP_LOGI(TAG, "插入指纹ID成功: %d", zw111.fingerIDArray[insert_pos]);
+#endif
 
     return ESP_OK; // 插入成功
 }
@@ -1136,7 +1140,7 @@ void uart_task(void *pvParameters)
                         }
                         else if (g_readyDeleteFingerprint == true && g_readyDeleteAllFingerprint == false)
                         {
-                            zw111.state = 0x03;               // 设置状态为删除指纹状态
+                            zw111.state = 0x03; // 设置状态为删除指纹状态
                             // 发送删除指纹命令
                             if (delete_char(g_deleteFingerprintID, 1) != ESP_OK)
                             {
@@ -1148,7 +1152,7 @@ void uart_task(void *pvParameters)
                         }
                         else if (g_readyDeleteAllFingerprint == true && g_readyDeleteFingerprint == false)
                         {
-                            zw111.state = 0x03;                  // 设置状态为删除指纹状态
+                            zw111.state = 0x03; // 设置状态为删除指纹状态
                             // 发送删除所有指纹命令
                             if (empty() != ESP_OK)
                             {
@@ -1426,7 +1430,9 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-模板存储成功，id:%d", get_mini_unused_id());
 #endif
+
                             insert_fingerprint_id(get_mini_unused_id());
+                            // broadcast_fingerprint_list();
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else if (dtmp[9] == 0x26)
