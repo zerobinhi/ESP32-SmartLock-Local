@@ -11,8 +11,6 @@
 #define WS_RECV_BUFFER_SIZE 128
 #define MAX_CARDS 20
 #define MAX_WS_CLIENTS 5
-#define INDEX_HTML_BUFFER_SIZE 4096
-#define RESPONSE_DATA_BUFFER_SIZE 4096
 
 extern struct fingerprint_device zw111; // 指纹设备全局变量
 

@@ -289,9 +289,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
 /**
  * WebSocket广播JSON
  */
-/**
- * WebSocket广播JSON
- */
 static esp_err_t ws_broadcast_json(cJSON *json)
 {
     if (!json)
