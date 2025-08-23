@@ -85,10 +85,12 @@ struct fingerprint_device
 };
 
 extern bool g_readyAddFingerprint;
+extern bool g_cancelAddFingerprint;
 extern bool g_readyDeleteFingerprint;
 extern bool g_readyDeleteAllFingerprint;
 extern uint8_t g_deleteFingerprintID;
 extern void send_fingerprint_list();
+extern void send_operation_result(const char *message, bool success);
 
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);

@@ -11,6 +11,7 @@ int card_count = 0;
 
 // 标志位，进行操作的时候指纹模块可能处在关机状态，也可能在验证指纹状态
 bool g_readyAddFingerprint = false;
+bool g_cancelAddFingerprint = false;
 bool g_readyDeleteFingerprint = false;
 bool g_readyDeleteAllFingerprint = false;
 uint8_t g_deleteFingerprintID = 0;
@@ -224,6 +225,12 @@ static esp_err_t ws_handler(httpd_req_t *req)
             send_status_msg("指纹数量已达上限");
         }
     }
+    else if (strcmp(recv_buf, "cancel_add_fingerprint") == 0)
+    {
+        ESP_LOGI(TAG, "处理取消添加指纹命令");
+        g_cancelAddFingerprint = true;
+        cancel_current_operation_and_execute_command();
+    }
     else if (strcmp(recv_buf, "clear_cards") == 0)
     {
         ESP_LOGI(TAG, "处理清空卡片命令");
@@ -276,7 +283,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
             zw111.state = 0x03;    // 设置状态为删除指纹状态
             turn_on_fingerprint(); // 开机！
         }
-        send_status_msg("删除指定指纹命令");
     }
     else if (ws_pkt.len > 0)
     {
@@ -404,6 +410,17 @@ void send_init_data()
     cJSON_AddStringToObject(root, "type", "init_data");
     cJSON_AddItemToObject(root, "cards", cards_array);
     cJSON_AddItemToObject(root, "fingers", fingers_array);
+    ws_broadcast_json(root);
+    cJSON_Delete(root);
+}
+
+// 发送操作结果
+void send_operation_result(const char *message, bool result)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "type", "operation_result");
+    cJSON_AddStringToObject(root, "message", message);
+    cJSON_AddBoolToObject(root, "result", result);
     ws_broadcast_json(root);
     cJSON_Delete(root);
 }

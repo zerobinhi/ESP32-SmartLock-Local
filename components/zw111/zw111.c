@@ -849,10 +849,10 @@ esp_err_t insert_fingerprint_id(uint8_t new_id)
 
 void cancel_current_operation_and_execute_command()
 {
+    zw111.state = 0x0A; // 切换为取消状态
     // 发送取消命令
     if (cancel() == ESP_OK)
     {
-        zw111.state = 0x0A; // 切换为取消状态
 #ifdef DEBUG
         ESP_LOGI(TAG, "准备取消当前操作，模块状态已切换为取消状态");
 #endif
@@ -887,10 +887,10 @@ void turn_on_fingerprint()
  */
 void prepare_turn_off_fingerprint()
 {
+    zw111.state = 0x0B; // 切换为休眠状态
     // 发送休眠命令
     if (sleep() == ESP_OK)
     {
-        zw111.state = 0x0B; // 切换为休眠状态
 #ifdef DEBUG
         ESP_LOGI(TAG, "准备休眠，模块状态已切换为休眠状态");
 #endif
@@ -1098,7 +1098,7 @@ void uart_task(void *pvParameters)
                     }
                     if (dtmp[9] == 0x00) // 确认码=00H 表示休眠设置成功
                     {
-                        gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 断开指纹模块供电
+                        gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 给指纹模块断电
                         zw111.power = false;                    // 设置供电状态为false
                         zw111.state = 0X00;                     // 切换为初始状态
 #ifdef DEBUG
@@ -1135,8 +1135,13 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                                 ESP_LOGE(TAG, "注册指纹命令发送失败");
 #endif
-                                prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                                prepare_turn_off_fingerprint();
                             }
+                        }
+                        else if (g_cancelAddFingerprint == true)
+                        {
+                            g_cancelAddFingerprint = false; // 重置取消添加指纹标志
+                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else if (g_readyDeleteFingerprint == true && g_readyDeleteAllFingerprint == false)
                         {
@@ -1289,6 +1294,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGE(TAG, "注册指纹-当前ID已被使用，请选择其他ID");
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else
@@ -1298,6 +1304,7 @@ void uart_task(void *pvParameters)
                             // 打印接收到的未知数据
                             ESP_LOG_BUFFER_HEX(TAG, dtmp, event.size);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                     }
@@ -1314,6 +1321,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-第%d次采图超时", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else
@@ -1321,6 +1329,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-第%d次采图失败", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                     }
@@ -1338,6 +1347,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-第%d次生成特征超时", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else
@@ -1345,6 +1355,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-第%d次采图失败", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                     }
@@ -1362,6 +1373,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-手指第%d次离开，录入超时", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
 
@@ -1370,6 +1382,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-手指第%d次离开，录入失败", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                     }
@@ -1387,6 +1400,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-合并模板超时", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
 
@@ -1395,6 +1409,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-合并模板失败", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                     }
@@ -1412,6 +1427,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-已注册检测超时");
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else
@@ -1419,6 +1435,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-已注册检测失败", dtmp[11]);
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                     }
@@ -1430,9 +1447,9 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-模板存储成功，id:%d", get_mini_unused_id());
 #endif
-
                             insert_fingerprint_id(get_mini_unused_id());
                             send_fingerprint_list();
+                            send_operation_result("fingerprint_added", true);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else if (dtmp[9] == 0x26)
@@ -1440,6 +1457,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-模板存储超时");
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                         else
@@ -1447,6 +1465,7 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                             ESP_LOGI(TAG, "注册指纹-模板存储失败");
 #endif
+                            send_operation_result("fingerprint_added", false);
                             prepare_turn_off_fingerprint(); // 准备关闭指纹模块
                         }
                     }
@@ -1473,6 +1492,7 @@ void uart_task(void *pvParameters)
                         zw111.fingerNumber = 0; // 清空指纹数量
 
                         g_readyDeleteAllFingerprint = false; // 重置删除所有指纹标志
+                        send_operation_result("fingerprint_cleared", true);
 #ifdef DEBUG
                         ESP_LOGI(TAG, "删除指纹-清空所有指纹成功");
 #endif
@@ -1501,6 +1521,10 @@ void uart_task(void *pvParameters)
                         zw111.fingerNumber--; // 减少指纹数量
 
                         g_readyDeleteFingerprint = false; // 重置删除单个指纹标志
+
+                        send_fingerprint_list();
+                        
+                        send_operation_result("fingerprint_deleted", true);
 
 #ifdef DEBUG
                         ESP_LOGI(TAG, "删除指纹-删除ID:%d成功", g_deleteFingerprintID);
