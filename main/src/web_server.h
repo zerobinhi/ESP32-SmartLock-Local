@@ -8,6 +8,7 @@
 #include "zw111.h"
 
 #define CSS_PATH "/spiffs/style.css"
+#define FAVICON_PATH "/spiffs/favicon.ico"
 #define WS_RECV_BUFFER_SIZE 128
 #define MAX_CARDS 20
 #define MAX_WS_CLIENTS 5

@@ -5,6 +5,7 @@ char *index_html;
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
+static esp_err_t favicon_handler(httpd_req_t *req);
 
 CardInfo card_list[MAX_CARDS] = {0};
 int card_count = 0;
@@ -51,11 +52,18 @@ httpd_handle_t web_server_start(void)
         .user_ctx = NULL,
         .is_websocket = true};
 
+    httpd_uri_t favicon_uri = {
+        .uri = "/favicon.ico",
+        .method = HTTP_GET,
+        .handler = favicon_handler,
+        .user_ctx = NULL};
+
     if (httpd_start(&server, &config) == ESP_OK)
     {
         httpd_register_uri_handler(server, &index_uri);
         httpd_register_uri_handler(server, &css_uri);
         httpd_register_uri_handler(server, &ws_uri);
+        httpd_register_uri_handler(server, &favicon_uri);
         ESP_LOGI(TAG, "Web服务器启动成功");
     }
     else
@@ -324,6 +332,43 @@ static esp_err_t ws_broadcast_json(cJSON *json)
 
     free(json_str);
     return ESP_OK;
+}
+
+/**
+ * favicon.ico 请求处理器
+ */
+static esp_err_t favicon_handler(httpd_req_t *req)
+{
+    struct stat st;
+    if (stat(FAVICON_PATH, &st) != 0)
+    {
+        ESP_LOGE(TAG, "未找到favicon.ico");
+        return httpd_resp_send_404(req);
+    }
+
+    FILE *fp = fopen(FAVICON_PATH, "r");
+    if (!fp)
+    {
+        ESP_LOGE(TAG, "打开favicon.ico失败");
+        return httpd_resp_send_500(req);
+    }
+
+    httpd_resp_set_type(req, "image/x-icon");
+    char buffer[512];
+    size_t bytes_read;
+
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), fp)) > 0)
+    {
+        if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK)
+        {
+            fclose(fp);
+            ESP_LOGE(TAG, "发送favicon.ico数据失败");
+            return ESP_FAIL;
+        }
+    }
+
+    fclose(fp);
+    return httpd_resp_send_chunk(req, NULL, 0);
 }
 
 /**

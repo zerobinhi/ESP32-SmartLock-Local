@@ -9,6 +9,9 @@
 
 #define DEBUG
 
+#define true	1
+#define false	0
+
 #define INDEX_HTML_BUFFER_SIZE 32768
 #define RESPONSE_DATA_BUFFER_SIZE 32768
 
@@ -16,5 +19,8 @@
 #define FINGERPRINT_RX_PIN 25
 #define FINGERPRINT_CTL_PIN 33
 #define FINGERPRINT_INT_PIN 27
+
+#define true 1
+#define false 0
 
 #endif // APP_CONFIG_H
