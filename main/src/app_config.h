@@ -2,8 +2,10 @@
 #define APP_CONFIG_H
 
 #include <string.h>
-#include "esp_err.h"
-#include "esp_log.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <esp_err.h>
+#include <esp_log.h>
 
 #define DEBUG
 

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <driver/i2c_master.h>
 #include "ssd1306.h"
 #include <string.h> // for memset
 

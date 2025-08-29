@@ -1,6 +1,6 @@
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "nvs_flash.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <nvs_flash.h>
 #include "app_config.h"
 #include "wifi.h"
 #include "spiffs.h"

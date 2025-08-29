@@ -16,8 +16,7 @@ extern "C"
 {
 #endif
 
-#include "driver/i2c_master.h"
-#include "stdint.h"
+#include <driver/i2c_master.h>
 #include "ssd1306_fonts.h"
 
 /**

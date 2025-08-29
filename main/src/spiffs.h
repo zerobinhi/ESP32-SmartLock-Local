@@ -2,7 +2,7 @@
 #define SPIFFS_H
 
 #include <sys/stat.h>
-#include "esp_spiffs.h"
+#include <esp_spiffs.h>
 #include "app_config.h"
 
 #define INDEX_HTML_PATH "/spiffs/index.html"

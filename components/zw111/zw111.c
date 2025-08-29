@@ -1523,7 +1523,7 @@ void uart_task(void *pvParameters)
                         g_readyDeleteFingerprint = false; // 重置删除单个指纹标志
 
                         send_fingerprint_list();
-                        
+
                         send_operation_result("fingerprint_deleted", true);
 
 #ifdef DEBUG

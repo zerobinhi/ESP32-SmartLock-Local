@@ -1,11 +1,8 @@
 #ifndef ZW111_H_
 #define ZW111_H_
 
-#include "driver/uart.h"
-#include "driver/gpio.h"
-
-#include <stdint.h>
-#include <stdbool.h>
+#include <driver/uart.h>
+#include <driver/gpio.h>
 #include "app_config.h"
 
 // ========================== 硬件配置宏 ==========================
