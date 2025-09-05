@@ -22,11 +22,15 @@ static const char *TAG = "SmartLock PN532";
  * @param arg 中断参数（传入GPIO编号）
  * @return void
  */
-void IRAM_ATTR card_gpio_isr_handler(void *arg)
+static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
     uint32_t gpio_num = (uint32_t)arg;
-    if (gpio_num == PN532_INT_PIN && gpio_get_level(PN532_INT_PIN) == 1)
+
+    if (gpio_num == PN532_INT_PIN && gpio_get_level(PN532_INT_PIN) == 0)
     {
+#ifdef DEBUG
+        ESP_EARLY_LOGI(TAG, "pn532模块中断触发, gpio_num=%d", gpio_num);
+#endif
         xSemaphoreGiveFromISR(pn532_semaphore, NULL);
     }
 }
@@ -73,9 +77,8 @@ esp_err_t pn532_initialization()
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&pn532_reset_gpio_config);
 
-    // gpio_install_isr_service(0);
-    gpio_isr_handler_add(PN532_INT_PIN, card_gpio_isr_handler, (void *)PN532_INT_PIN);
-
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(PN532_INT_PIN, gpio_isr_handler, (void *)PN532_INT_PIN);
 #ifdef DEBUG
     ESP_LOGI(TAG, "pn532 interrupt gpio configured");
 #endif
@@ -211,7 +214,7 @@ void pn532_task(void *arg)
                 vTaskDelay(pdMS_TO_TICKS(20));
                 i2c_master_receive(pn532_handle, ack, sizeof(ack), 500);
                 res[0] = 0x00;
-                ESP_LOG_BUFFER_HEX(TAG, ack, sizeof(ack));
+                // ESP_LOG_BUFFER_HEX(TAG, ack, sizeof(ack));
             }
 
             xSemaphoreTake(pn532_semaphore, portMAX_DELAY);

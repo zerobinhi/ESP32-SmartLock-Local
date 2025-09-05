@@ -910,11 +910,14 @@ void prepare_turn_off_fingerprint()
  * @param arg 中断参数（传入GPIO编号）
  * @return void
  */
-void IRAM_ATTR fingerprint_gpio_isr_handler(void *arg)
+static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
     uint32_t gpio_num = (uint32_t)arg;
     if (gpio_num == FINGERPRINT_INT_PIN && gpio_get_level(FINGERPRINT_INT_PIN) == 1)
     {
+#ifdef DEBUG
+        ESP_EARLY_LOGI(TAG, "指纹模块中断触发, gpio_num=%d", gpio_num);
+#endif
         xSemaphoreGiveFromISR(fingerprint_semaphore, NULL);
     }
 }
@@ -924,6 +927,7 @@ void IRAM_ATTR fingerprint_gpio_isr_handler(void *arg)
  */
 esp_err_t fingerprint_initialization_uart()
 {
+
     esp_err_t ret = ESP_OK;
 
     // 检查是否已安装
@@ -954,6 +958,7 @@ esp_err_t fingerprint_initialization_uart()
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_DEFAULT,
     };
+
     ret = uart_param_config(EX_UART_NUM, &uart_config);
     if (ret != ESP_OK)
     {
@@ -1091,7 +1096,7 @@ esp_err_t fingerprint_initialization()
     fingerprint_semaphore = xSemaphoreCreateBinary(); // 仅用于触摸之后开启模块
 
     gpio_install_isr_service(0);
-    gpio_isr_handler_add(FINGERPRINT_INT_PIN, fingerprint_gpio_isr_handler, (void *)FINGERPRINT_INT_PIN);
+    gpio_isr_handler_add(FINGERPRINT_INT_PIN, gpio_isr_handler, (void *)FINGERPRINT_INT_PIN);
 
 #ifdef DEBUG
     ESP_LOGI(TAG, "zw101 interrupt gpio configured");
@@ -1100,7 +1105,7 @@ esp_err_t fingerprint_initialization()
     // Create a task to handler UART event from ISR
     xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
     xTaskCreate(fingerprint_task, "fingerprint_task", 8192, NULL, 10, NULL);
-    xTaskCreate(buzzer_task, "buzzer_task", 2048, NULL, 10, NULL);
+    xTaskCreate(buzzer_task, "buzzer_task", 8192, NULL, 10, NULL);
 
 #ifdef DEBUG
     ESP_LOGI(TAG, "fingerprint device created");

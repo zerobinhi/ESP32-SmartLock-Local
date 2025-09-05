@@ -25,11 +25,11 @@ void app_main(void)
 #ifdef DEBUG
     ESP_LOGI(MAIN_TAG, "初始化系统组件...");
 #endif
-    wifi_init_softap();
-    spiffs_init_and_load_webpage();
+    // wifi_init_softap();
+    // spiffs_init_and_load_webpage();
 
-    // 启动Web服务器
-    web_server_start();
+    // // 启动Web服务器
+    // web_server_start();
     // 初始化指纹模块
     if (fingerprint_initialization() != ESP_OK)
     {
