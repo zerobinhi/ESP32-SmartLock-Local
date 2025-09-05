@@ -64,11 +64,16 @@ httpd_handle_t web_server_start(void)
         httpd_register_uri_handler(server, &css_uri);
         httpd_register_uri_handler(server, &ws_uri);
         httpd_register_uri_handler(server, &favicon_uri);
+#ifdef DEBUG
         ESP_LOGI(TAG, "Web服务器启动成功");
+#endif
     }
     else
     {
+#ifdef DEBUG
         ESP_LOGE(TAG, "Web服务器启动失败");
+#endif
+        return NULL;
     }
 
     return server;
@@ -79,11 +84,15 @@ httpd_handle_t web_server_start(void)
  */
 static esp_err_t root_handler(httpd_req_t *req)
 {
+#ifdef DEBUG
     ESP_LOGI(TAG, "收到主页面请求");
+#endif
 
     if (!index_html)
     {
+#ifdef DEBUG
         ESP_LOGE(TAG, "index_html 未加载");
+#endif
         return httpd_resp_send_500(req);
     }
 
@@ -99,14 +108,18 @@ static esp_err_t css_handler(httpd_req_t *req)
     struct stat st;
     if (stat(CSS_PATH, &st) != 0)
     {
+#ifdef DEBUG
         ESP_LOGE(TAG, "未找到style.css");
+#endif
         return httpd_resp_send_404(req);
     }
 
     FILE *fp = fopen(CSS_PATH, "r");
     if (!fp)
     {
+#ifdef DEBUG
         ESP_LOGE(TAG, "打开style.css失败");
+#endif
         return httpd_resp_send_500(req);
     }
 
@@ -119,7 +132,9 @@ static esp_err_t css_handler(httpd_req_t *req)
         if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK)
         {
             fclose(fp);
+#ifdef DEBUG
             ESP_LOGE(TAG, "发送CSS数据失败");
+#endif
             return ESP_FAIL;
         }
     }
@@ -135,14 +150,18 @@ static esp_err_t ws_handler(httpd_req_t *req)
 {
     if (req->method == HTTP_GET)
     {
+#ifdef DEBUG
         ESP_LOGI(TAG, "客户端尝试建立WebSocket连接");
+#endif
 
         // 保存客户端 fd
         int fd = httpd_req_to_sockfd(req);
         if (ws_client_count < MAX_WS_CLIENTS)
         {
             ws_clients[ws_client_count++] = fd;
+#ifdef DEBUG
             ESP_LOGI(TAG, "新客户端加入，fd=%d，总数=%d", fd, ws_client_count);
+#endif
         }
 
         send_init_data();
@@ -162,7 +181,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
     if (ret != ESP_OK)
     {
+#ifdef DEBUG
         ESP_LOGE(TAG, "接收帧头失败: %s", esp_err_to_name(ret));
+#endif
         return ret;
     }
 
@@ -170,7 +191,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
     if (ws_pkt.len > WS_RECV_BUFFER_SIZE - 1)
     {
         ws_pkt.len = WS_RECV_BUFFER_SIZE - 1;
+#ifdef DEBUG
         ESP_LOGW(TAG, "数据过长，截断为%d字节", ws_pkt.len);
+#endif
     }
 
     // 接收实际数据
@@ -179,17 +202,23 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
         if (ret != ESP_OK)
         {
+#ifdef DEBUG
             ESP_LOGE(TAG, "接收数据失败: %s", esp_err_to_name(ret));
+#endif
             return ret;
         }
         recv_buf[ws_pkt.len] = '\0';
+#ifdef DEBUG
         ESP_LOGI(TAG, "收到数据 [长度:%d]: %s", ws_pkt.len, recv_buf);
+#endif
     }
 
     // 命令处理逻辑
     if (strcmp(recv_buf, "add_card") == 0)
     {
+#ifdef DEBUG
         ESP_LOGI(TAG, "处理添加卡片命令");
+#endif
         // 检查是否还有空间
         if (card_count < MAX_CARDS)
         {
@@ -235,13 +264,17 @@ static esp_err_t ws_handler(httpd_req_t *req)
     }
     else if (strcmp(recv_buf, "cancel_add_fingerprint") == 0)
     {
+#ifdef DEBUG
         ESP_LOGI(TAG, "处理取消添加指纹命令");
+#endif
         g_cancelAddFingerprint = true;
         cancel_current_operation_and_execute_command();
     }
     else if (strcmp(recv_buf, "clear_cards") == 0)
     {
+#ifdef DEBUG
         ESP_LOGI(TAG, "处理清空卡片命令");
+#endif
         card_count = 0;
         memset(card_list, 0, sizeof(card_list));
         send_card_list();
@@ -266,12 +299,16 @@ static esp_err_t ws_handler(httpd_req_t *req)
     }
     else if (strcmp(recv_buf, "refresh_cards") == 0)
     {
+#ifdef DEBUG
         ESP_LOGI(TAG, "处理刷新卡片命令");
+#endif
         send_card_list();
     }
     else if (strcmp(recv_buf, "refresh_fingerprints") == 0)
     {
+#ifdef DEBUG
         ESP_LOGI(TAG, "处理刷新指纹命令");
+#endif
         send_fingerprint_list();
     }
     else if (strstr(recv_buf, "delete_fingerprint:") != NULL)
@@ -294,7 +331,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
     }
     else if (ws_pkt.len > 0)
     {
+#ifdef DEBUG
         ESP_LOGI(TAG, "收到未知命令: %s", recv_buf);
+#endif
         send_status_msg("未知命令");
     }
 
@@ -317,14 +356,17 @@ static esp_err_t ws_broadcast_json(cJSON *json)
         .type = HTTPD_WS_TYPE_TEXT,
         .payload = (uint8_t *)json_str,
         .len = strlen(json_str)};
-
+#ifdef DEBUG
     ESP_LOGI(TAG, "广播消息: %s", json_str);
+#endif
 
     for (int i = 0; i < ws_client_count; i++)
     {
         if (httpd_ws_send_frame_async(server, ws_clients[i], &ws_pkt) != ESP_OK)
         {
+#ifdef DEBUG
             ESP_LOGW(TAG, "客户端 fd=%d 发送失败，移除", ws_clients[i]);
+#endif
             ws_clients[i] = ws_clients[--ws_client_count];
             i--;
         }
@@ -342,14 +384,18 @@ static esp_err_t favicon_handler(httpd_req_t *req)
     struct stat st;
     if (stat(FAVICON_PATH, &st) != 0)
     {
+#ifdef DEBUG
         ESP_LOGE(TAG, "未找到favicon.ico");
+#endif
         return httpd_resp_send_404(req);
     }
 
     FILE *fp = fopen(FAVICON_PATH, "r");
     if (!fp)
     {
+#ifdef DEBUG
         ESP_LOGE(TAG, "打开favicon.ico失败");
+#endif
         return httpd_resp_send_500(req);
     }
 
@@ -362,7 +408,9 @@ static esp_err_t favicon_handler(httpd_req_t *req)
         if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK)
         {
             fclose(fp);
+#ifdef DEBUG
             ESP_LOGE(TAG, "发送favicon.ico数据失败");
+#endif
             return ESP_FAIL;
         }
     }

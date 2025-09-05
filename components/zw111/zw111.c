@@ -874,6 +874,8 @@ void cancel_current_operation_and_execute_command()
 void turn_on_fingerprint()
 {
     gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给指纹模块供电
+    fingerprint_initialization_uart();      // 初始化UART通信
+    xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
     zw111.power = true;
 #ifdef DEBUG
     ESP_LOGI(TAG, "指纹模块已供电");
@@ -903,8 +905,12 @@ void prepare_turn_off_fingerprint()
 #endif
     }
 }
-
-void IRAM_ATTR gpio_isr_handler(void *arg)
+/**
+ * @brief 触摸中断服务程序
+ * @param arg 中断参数（传入GPIO编号）
+ * @return void
+ */
+void IRAM_ATTR fingerprint_gpio_isr_handler(void *arg)
 {
     uint32_t gpio_num = (uint32_t)arg;
     if (gpio_num == FINGERPRINT_INT_PIN && gpio_get_level(FINGERPRINT_INT_PIN) == 1)
@@ -912,15 +918,34 @@ void IRAM_ATTR gpio_isr_handler(void *arg)
         xSemaphoreGiveFromISR(fingerprint_semaphore, NULL);
     }
 }
-
 /**
  * @brief 初始化指纹模块UART通信
- * @return esp_err_t ESP_OK=初始化成功，ESP_FAIL=数据无效或初始化失败
+ * @return esp_err_t ESP_OK=初始化成功，其他=失败
  */
-esp_err_t fingerprint_initialization()
+esp_err_t fingerprint_initialization_uart()
 {
-    /* Configure parameters of an UART driver,
-     * communication pins and install the driver */
+    esp_err_t ret = ESP_OK;
+
+    // 检查是否已安装
+    if (uart_is_driver_installed(EX_UART_NUM))
+    {
+#ifdef DEBUG
+        ESP_LOGW(TAG, "UART驱动已安装，无需重复安装");
+#endif
+        return ESP_OK;
+    }
+
+    // 安装UART驱动
+    ret = uart_driver_install(EX_UART_NUM, 1024, 1024, 5, &uart2_queue, 0);
+    if (ret != ESP_OK)
+    {
+#ifdef DEBUG
+        ESP_LOGE(TAG, "UART驱动安装失败: 0x%x", ret);
+#endif
+        return ret;
+    }
+
+    // 配置UART参数
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -929,18 +954,116 @@ esp_err_t fingerprint_initialization()
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_DEFAULT,
     };
-    // Install UART driver, and get the queue.
-    uart_driver_install(EX_UART_NUM, 1024, 1024, 5, &uart2_queue, 0);
-    uart_param_config(EX_UART_NUM, &uart_config);
+    ret = uart_param_config(EX_UART_NUM, &uart_config);
+    if (ret != ESP_OK)
+    {
+#ifdef DEBUG
+        ESP_LOGE(TAG, "UART参数配置失败: 0x%x", ret);
+#endif
+        uart_driver_delete(EX_UART_NUM); // 回滚操作
+        return ret;
+    }
 
-    // Set UART pins (using UART0 default pins ie no changes.)
-    uart_set_pin(EX_UART_NUM, FINGERPRINT_RX_PIN, FINGERPRINT_TX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    // 设置UART引脚
+    ret = uart_set_pin(EX_UART_NUM, FINGERPRINT_RX_PIN, FINGERPRINT_TX_PIN,
+                       UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE,
+                       UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    if (ret != ESP_OK)
+    {
+#ifdef DEBUG
+        ESP_LOGE(TAG, "UART引脚配置失败: 0x%x", ret);
+#endif
+        uart_driver_delete(EX_UART_NUM); // 回滚操作
+        return ret;
+    }
 
-    // Set uart pattern detect function.
-    uart_enable_pattern_det_baud_intr(EX_UART_NUM, 0x55, 1, 9, 20, 0);
+    // 配置模式检测（原有功能保留）
+    ret = uart_enable_pattern_det_baud_intr(EX_UART_NUM, 0x55, 1, 9, 20, 0);
+    if (ret != ESP_OK)
+    {
+#ifdef DEBUG
+        ESP_LOGE(TAG, "模式检测配置失败: 0x%x", ret);
+#endif
+        uart_driver_delete(EX_UART_NUM); // 回滚操作
+        return ret;
+    }
 
-    // Reset the pattern queue length to record at most 5 pattern positions.
-    uart_pattern_queue_reset(EX_UART_NUM, 5);
+    // 重置模式队列（原有功能保留）
+    ret = uart_pattern_queue_reset(EX_UART_NUM, 5);
+    if (ret != ESP_OK)
+    {
+#ifdef DEBUG
+        ESP_LOGE(TAG, "模式队列重置失败: 0x%x", ret);
+#endif
+        uart_driver_delete(EX_UART_NUM); // 回滚操作
+        return ret;
+    }
+
+#ifdef DEBUG
+    ESP_LOGI(TAG, "UART初始化成功");
+#endif
+    return ESP_OK;
+}
+
+/**
+ * @brief 删除指纹模块UART通信
+ * @return esp_err_t ESP_OK=删除成功，ESP_FAIL=删除失败
+ */
+esp_err_t fingerprint_deinitialization_uart()
+{
+    if (!uart_is_driver_installed(EX_UART_NUM))
+    {
+#ifdef DEBUG
+        ESP_LOGE(TAG, "UART驱动未安装，无法删除");
+#endif
+        return ESP_FAIL;
+    }
+
+    // 等待TX数据发送完成
+    esp_err_t ret = uart_wait_tx_done(EX_UART_NUM, 100); // 超时100ticks
+    if (ret == ESP_ERR_TIMEOUT)
+    {
+#ifdef DEBUG
+        ESP_LOGW(TAG, "TX缓冲区数据未完全发送，强制删除");
+#endif
+    }
+
+    // 清空RX缓冲区
+    uart_flush_input(EX_UART_NUM);
+
+    // 删除事件队列
+    if (uart2_queue != NULL)
+    {
+        vQueueDelete(uart2_queue);
+        uart2_queue = NULL;
+    }
+
+    // 删除UART驱动
+    ret = uart_driver_delete(EX_UART_NUM);
+    if (ret != ESP_OK)
+    {
+#ifdef DEBUG
+        ESP_LOGE(TAG, "UART驱动删除失败: 0x%x", ret);
+#endif
+        return ret;
+    }
+
+#ifdef DEBUG
+    ESP_LOGI(TAG, "UART驱动已删除");
+#endif
+    return ESP_OK;
+}
+/**
+ * @brief 初始化指纹模块UART通信
+ * @return esp_err_t ESP_OK=初始化成功，ESP_FAIL=数据无效或初始化失败
+ */
+esp_err_t fingerprint_initialization()
+{
+    // 初始化UART通信
+    if (fingerprint_initialization_uart() != ESP_OK)
+    {
+        return ESP_FAIL;
+    }
 
     // 初始化指纹模块数据结构
     zw111.deviceAddress[0] = 0xFF;
@@ -966,8 +1089,13 @@ esp_err_t fingerprint_initialization()
 
     xQueue_buzzer = xQueueCreate(1, sizeof(uint8_t)); // 用于存储蜂鸣器鸣叫的方式
     fingerprint_semaphore = xSemaphoreCreateBinary(); // 仅用于触摸之后开启模块
+
     gpio_install_isr_service(0);
-    gpio_isr_handler_add(FINGERPRINT_INT_PIN, gpio_isr_handler, (void *)FINGERPRINT_INT_PIN);
+    gpio_isr_handler_add(FINGERPRINT_INT_PIN, fingerprint_gpio_isr_handler, (void *)FINGERPRINT_INT_PIN);
+
+#ifdef DEBUG
+    ESP_LOGI(TAG, "zw101 interrupt gpio configured");
+#endif
 
     // Create a task to handler UART event from ISR
     xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
@@ -1027,8 +1155,6 @@ void buzzer_task(void *pvParameters)
 // 指纹任务
 void fingerprint_task(void *pvParameters)
 {
-    turn_on_fingerprint(); // 打开指纹模块供电
-
     while (1)
     {
         // 等待信号量被释放
@@ -1104,6 +1230,8 @@ void uart_task(void *pvParameters)
 #ifdef DEBUG
                         ESP_LOGI(TAG, "指纹模块已断电，状态已重置为初始状态");
 #endif
+                        fingerprint_deinitialization_uart(); // 删除UART驱动
+                        vTaskDelete(NULL);                   // 删除当前任务
                     }
                 }
                 else if (zw111.state == 0X0A && event.size == 12) // 取消状态
@@ -1194,9 +1322,11 @@ void uart_task(void *pvParameters)
                     else if (dtmp[10] == 0x01)
                     {
                         if (dtmp[9] == 0x00)
+                        {
 #ifdef DEBUG
                             ESP_LOGI(TAG, "验证指纹-获取图像成功");
 #endif
+                        }
                         else if (dtmp[9] == 0x26)
                         {
 #ifdef DEBUG
