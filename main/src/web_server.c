@@ -192,7 +192,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     {
         ws_pkt.len = WS_RECV_BUFFER_SIZE - 1;
 #ifdef DEBUG
-        ESP_LOGW(TAG, "数据过长，截断为%d字节", ws_pkt.len);
+        ESP_LOGW(TAG, "数据过长，截断为%u字节", ws_pkt.len);
 #endif
     }
 
@@ -209,7 +209,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         }
         recv_buf[ws_pkt.len] = '\0';
 #ifdef DEBUG
-        ESP_LOGI(TAG, "收到数据 [长度:%d]: %s", ws_pkt.len, recv_buf);
+        ESP_LOGI(TAG, "收到数据 [长度:%u]: %s", ws_pkt.len, recv_buf);
 #endif
     }
 
@@ -239,7 +239,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     else if (strcmp(recv_buf, "add_fingerprint") == 0)
     {
 #ifdef DEBUG
-        ESP_LOGI(TAG, "处理添加指纹命令, 当前模组状态: %d", zw111.state);
+        ESP_LOGI(TAG, "处理添加指纹命令, 当前模组状态: %u", zw111.state);
 #endif
 
         // 检查是否还有空间
@@ -284,7 +284,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     {
 
 #ifdef DEBUG
-        ESP_LOGI(TAG, "处理清空指纹命令, 当前模组状态: %d", zw111.state);
+        ESP_LOGI(TAG, "处理清空指纹命令, 当前模组状态: %u", zw111.state);
 #endif
         g_readyDeleteAllFingerprint = true;
         if (zw111.power == true)
@@ -316,7 +316,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         char *prefix = "delete_fingerprint:";
         g_deleteFingerprintID = atoi(recv_buf + strlen(prefix));
 #ifdef DEBUG
-        ESP_LOGI(TAG, "处理删除指定指纹命令，ID: %d，当前模组状态: %d", g_deleteFingerprintID, zw111.state);
+        ESP_LOGI(TAG, "处理删除指定指纹命令，ID: %u，当前模组状态: %u", g_deleteFingerprintID, zw111.state);
 #endif
         g_readyDeleteFingerprint = true;
         if (zw111.power == true)

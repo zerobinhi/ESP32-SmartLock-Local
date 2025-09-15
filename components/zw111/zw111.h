@@ -81,13 +81,14 @@ struct fingerprint_device
     uint8_t fingerNumber;
 };
 
-extern bool g_readyAddFingerprint;
-extern bool g_cancelAddFingerprint;
-extern bool g_readyDeleteFingerprint;
-extern bool g_readyDeleteAllFingerprint;
-extern uint8_t g_deleteFingerprintID;
-extern void send_fingerprint_list();
-extern void send_operation_result(const char *message, bool success);
+extern bool g_readyAddFingerprint;                                    // 准备添加指纹标志
+extern bool g_cancelAddFingerprint;                                   // 取消添加指纹标志
+extern bool g_readyDeleteFingerprint;                                 // 准备删除指纹标志
+extern bool g_readyDeleteAllFingerprint;                              // 准备删除所有指纹标志
+extern uint8_t g_deleteFingerprintID;                                 // 准备删除的指纹ID
+extern void send_fingerprint_list();                                  // 发送当前指纹列表到前端
+extern void send_operation_result(const char *message, bool success); // 发送操作结果到前端
+extern bool g_gpio_isr_service_installed;                             // 是否安装了GPIO中断服务
 
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);
@@ -99,6 +100,5 @@ void prepare_turn_off_fingerprint();
 void cancel_current_operation_and_execute_command();
 esp_err_t fingerprint_initialization_uart();
 esp_err_t fingerprint_deinitialization_uart();
-
 
 #endif // ZW111_H_

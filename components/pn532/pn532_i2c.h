@@ -9,7 +9,7 @@
 #include <esp_log.h>
 #include "app_config.h"
 
-extern i2c_master_dev_handle_t pn532_handle;
+extern i2c_master_dev_handle_t pn532_handle; // I2C从设备句柄
 
 esp_err_t pn532_initialization();
 void pn532_send_command_and_receive(const uint8_t *cmd, size_t cmd_len, uint8_t *response, size_t response_len);
