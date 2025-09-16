@@ -1,17 +1,16 @@
 #include "pn532_i2c.h"
 
-SemaphoreHandle_t pn532_semaphore = NULL;  // PN532模块的信号量，仅用于识别到卡靠近后读取卡号
+SemaphoreHandle_t pn532_semaphore = NULL; // PN532模块的信号量，仅用于识别到卡靠近后读取卡号
 
-i2c_master_bus_handle_t bus_handle;        // I2C主设备句柄
-i2c_master_dev_handle_t pn532_handle;      // I2C从设备句柄
+i2c_master_bus_handle_t bus_handle;   // I2C主设备句柄
+i2c_master_dev_handle_t pn532_handle; // I2C从设备句柄
 
 bool g_gpio_isr_service_installed = false; // 是否安装了GPIO中断服务
 
-uint8_t g_card_uid[8] = {0};               // 卡的UID
-uint8_t g_cmd_detect_card[] = {0x00, 0x00, 0xff, 0x04, 0xfc, 0xd4, 0x4a, 0x02, 0x00, 0xe0, 0x00};
-int32_t CARD_NUMBER = 0;    // 卡的数量
-bool READY_ADD_CARD = 0;    // 准备添加卡
-char CARD_ID[20][11] = {0}; // 卡号，最多添加19个卡
+uint64_t g_card_id_value[MAX_CARDS] = {0};                                                        // 卡号的数值形式
+uint8_t g_card_count = 0;                                                                         // 卡的数量
+uint8_t g_card_uid[8] = {0};                                                                      // 卡号
+uint8_t g_cmd_detect_card[] = {0x00, 0x00, 0xff, 0x04, 0xfc, 0xd4, 0x4a, 0x02, 0x00, 0xe0, 0x00}; // 读取卡片命令
 
 static const char *TAG = "SmartLock PN532";
 
@@ -74,7 +73,9 @@ esp_err_t pn532_initialization()
         g_gpio_isr_service_installed = true;
     }
     gpio_isr_handler_add(PN532_INT_PIN, gpio_isr_handler, (void *)PN532_INT_PIN);
+
     ESP_LOGI(TAG, "pn532 interrupt gpio configured");
+
     // 让pn532准备读取卡片
     uint8_t ack[7];
     uint8_t CMD_WAKEUP[] = {0x00, 0x00, 0xff, 0x02, 0xfe, 0xd4, 0x55, 0xd7, 0x00};              // 唤醒命令
@@ -83,6 +84,7 @@ esp_err_t pn532_initialization()
     pn532_send_command_and_receive(CMD_WAKEUP, sizeof(CMD_WAKEUP), ack, sizeof(ack));
     pn532_send_command_and_receive(CMD_SAMCONF, sizeof(CMD_SAMCONF), ack, sizeof(ack));
     pn532_send_command_and_receive(g_cmd_detect_card, sizeof(g_cmd_detect_card), ack, sizeof(ack));
+
     gpio_config_t pn532_int_gpio_config = {
         .pin_bit_mask = (1ULL << PN532_INT_PIN),
         .mode = GPIO_MODE_INPUT,
@@ -90,6 +92,25 @@ esp_err_t pn532_initialization()
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_NEGEDGE};
     gpio_config(&pn532_int_gpio_config);
+
+    // 读取存在nvs的卡片信息
+    nvs_custom_get_u8(NULL, "card", "count", &g_card_count);
+    for (uint8_t i = 0; i < g_card_count; i++)
+    {
+        char key[8];
+        snprintf(key, sizeof(key), "uid%d", i);
+        nvs_custom_get_u64(NULL, "card", key, &g_card_id_value[i]);
+    }
+
+    // 打印卡片数量
+    ESP_LOGI(TAG, "Total cards loaded: %d", g_card_count);
+    // 打印所有卡片ID
+    for (uint8_t i = 0; i < g_card_count; i++)
+    {
+        ESP_LOGI(TAG, "Card %d ID (uint64): 0x%llX", i + 1, g_card_id_value[i]);
+    }
+
+    // 创建任务
     xTaskCreate(pn532_task, "pn532_task", 8192, NULL, 10, NULL);
     return ESP_OK;
 }
@@ -123,23 +144,23 @@ esp_err_t pn532_send_command_and_receive(const uint8_t *cmd, size_t cmd_len, uin
 
 /**
  * 在卡号列表中查找指定卡号并返回其序号
- * @param card_id 要查找的卡号字符串
- * @param number 卡号数量
+ * @param card_id 要查找的卡号
  * @return 若找到则返回卡号在列表中的序号(1~20)，未找到则返回0
  */
-uint8_t find_card_id(const char *card_id, int number)
+uint8_t find_card_id(uint64_t card_id)
 {
-    // 检查参数有效性
-    if (card_id == NULL || number == 0)
+    // 检查是否有卡片
+    if (g_card_count == 0)
     {
         return 0;
     }
     // 遍历卡号列表查找匹配项
-    for (uint8_t i = 1; i <= number; i++)
+    for (uint8_t i = 0; i < g_card_count; i++)
     {
-        if (strcmp(CARD_ID[i], card_id) == 0)
+
+        if (g_card_id_value[i] == card_id)
         {
-            return i; // 找到匹配项，返回序号
+            return i + 1; // 找到匹配项，返回序号
         }
     }
     return 0; // 未找到匹配项
@@ -159,50 +180,53 @@ void pn532_task(void *arg)
         {
             if (i2c_master_receive(pn532_handle, res, sizeof(res), portMAX_DELAY) == ESP_OK && res[0] == 0x01)
             {
-                uint8_t id_len = res[13];                             // 卡ID长度
-                memcpy(g_card_uid, &res[14], id_len);                 // 复制卡ID
-                ESP_LOG_BUFFER_HEX("g_card_uid", g_card_uid, id_len); // 打印卡ID
+                uint8_t card_id_len = res[13]; // 卡号长度
+
+                if (card_id_len < 1 || card_id_len > 8)
+                {
+                    ESP_LOGE(TAG, "卡号长度不合法: %hhu", card_id_len);
+                    return; // 跳过无效卡号
+                }
+
+                memcpy(g_card_uid, &res[14], card_id_len); // 复制卡号
+
+                ESP_LOG_BUFFER_HEX("g_card_uid", g_card_uid, card_id_len); // 打印卡号
+
                 // ssd1306_draw_string(oled_handle, 0, 16, g_card_uid, 16, 1);
                 // ssd1306_refresh_gram(oled_handle);
-                // if (READY_ADD_CARD == 1) // 添加卡操作
-                // {
-                //     if (find_card_id(g_card_uid, CARD_NUMBER) == 0) // 没有此卡
-                //     {
-                //         uint8_t storage_index = CARD_NUMBER + 1; // 实际存储位置
-                //         // 复制卡号到数组
-                //         strncpy(CARD_ID[storage_index], g_card_uid, sizeof(CARD_ID[storage_index]) - 1);
-                //         CARD_ID[storage_index][sizeof(CARD_ID[storage_index]) - 1] = '\0';
-                //         ESP_LOGI(TAG, "添加卡片: %s 到位置: %u", CARD_ID[storage_index], storage_index);
-                //         CARD_NUMBER++; // 增加卡片数量
-                //         // write_nvs_i32("CARD_NUMBER", CARD_NUMBER);
-                //         char temp[20];
-                //         snprintf(temp, sizeof(temp), "CUID_ID%u", storage_index);
-                //         // write_nvs_string(temp, CARD_ID[storage_index]);
-                //         // aliot_post_property_int("theNumberOfCard", CARD_NUMBER);    // 上报卡片数量
-                //         // aliot_post_property_card("CardList", CARD_NUMBER, CARD_ID); // 上报卡片ID列表
-                //         READY_ADD_CARD = 0;
-                //     }
-                //     else // 存在此卡
-                //     {
-                //         ESP_LOGI(TAG, "卡片已存在！");
-                //         // xQueueSend(buzzer_queue, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
-                //     }
-                // }
-                // else
-                // {
-                //     ESP_LOGI(TAG, "CARD_NUMBER: %u", CARD_NUMBER);
-                //     ESP_LOGI(TAG, "g_card_uid: %s", g_card_uid);
-                //     if (find_card_id(g_card_uid, CARD_NUMBER) == 0)
-                //     {
-                //         ESP_LOGI(TAG, "卡片不存在！");
-                //         // xQueueSend(buzzer_queue, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
-                //     }
-                //     else
-                //     {
-                //         ESP_LOGI(TAG, "卡片存在！");
-                //         // xQueueSend(buzzer_queue, &BUZZER_OPEN, pdMS_TO_TICKS(10));
-                //     }
-                // }
+
+                uint64_t card_id_value = 0;
+
+                for (uint8_t i = 0; i < card_id_len; i++)
+                {
+                    card_id_value |= ((uint64_t)g_card_uid[i]) << ((card_id_len - i - 1) * 8);
+                }
+                ESP_LOGI(TAG, "Card ID: 0x%llX", card_id_value);
+
+                if (g_ready_add_card == true) // 添加卡操作
+                {
+                    if (find_card_id(card_id_value) == 0) // 是新卡
+                    {
+                        g_ready_add_card = false; // 重置添加卡标志
+
+                        char key[8];
+                        snprintf(key, sizeof(key), "uid%d", g_card_count);
+                        g_card_id_value[g_card_count] = card_id_value;
+                        g_card_count++;                            // 增加卡片数量
+                        send_operation_result("card_added", true); // 发送操作结果
+                        nvs_custom_set_u64(NULL, "card", key, card_id_value);
+                        nvs_custom_set_u8(NULL, "card", "count", g_card_count);
+                        ESP_LOGI(TAG, "Add card ID (uint64): 0x%llX", card_id_value);
+                        send_card_list(); // 发送更新后的卡片列表
+                    }
+                    else // 卡已存在
+                    {
+                        g_ready_add_card = false; // 重置添加卡标志
+                        send_operation_result("card_added", false);
+                        ESP_LOGI(TAG, "Card already exists: 0x%llX", card_id_value);
+                    }
+                }
+
                 uint8_t ack[7] = {0};
                 pn532_send_command_and_receive(g_cmd_detect_card, sizeof(g_cmd_detect_card), ack, sizeof(ack)); // 让pn532准备读取下一张卡
                 res[0] = 0x00;

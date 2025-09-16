@@ -264,6 +264,56 @@ esp_err_t nvs_custom_get_u32(const char *part_name, const char *ns_name, const c
     return ret;
 }
 
+esp_err_t nvs_custom_set_u64(const char *part_name, const char *ns_name, const char *key, uint64_t value)
+{
+    if (key == NULL)
+        return ESP_ERR_INVALID_ARG;
+    nvs_handle_t handle;
+    esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
+    if (ret != ESP_OK)
+        return ret;
+    ret = nvs_set_u64(handle, key, value);
+    if (ret == ESP_OK)
+    {
+        ret = nvs_commit(handle);
+        if (ret == ESP_OK)
+        {
+            ESP_LOGI(TAG, "Set u64 success [ns: %s, key: %s, value: %llu]", ns_name, key, value);
+        }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Set u64 failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
+    }
+    __nvs_custom_close(handle);
+    return ret;
+}
+
+esp_err_t nvs_custom_get_u64(const char *part_name, const char *ns_name, const char *key, uint64_t *out_value)
+{
+    if (key == NULL || out_value == NULL)
+        return ESP_ERR_INVALID_ARG;
+    nvs_handle_t handle;
+    esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
+    if (ret != ESP_OK)
+        return ret;
+    ret = nvs_get_u64(handle, key, out_value);
+    if (ret == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Get u64 success [ns: %s, key: %s, value: %llu]", ns_name, key, *out_value);
+    }
+    else if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        ESP_LOGW(TAG, "Get u64 failed: key not found [ns: %s, key: %s]", ns_name, key);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Get u64 failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
+    }
+    __nvs_custom_close(handle);
+    return ret;
+}
+
 esp_err_t nvs_custom_set_i8(const char *part_name, const char *ns_name, const char *key, int8_t value)
 {
     if (key == NULL)
@@ -414,6 +464,56 @@ esp_err_t nvs_custom_get_i32(const char *part_name, const char *ns_name, const c
     return ret;
 }
 
+esp_err_t nvs_custom_set_i64(const char *part_name, const char *ns_name, const char *key, int64_t value)
+{
+    if (key == NULL)
+        return ESP_ERR_INVALID_ARG;
+    nvs_handle_t handle;
+    esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
+    if (ret != ESP_OK)
+        return ret;
+    ret = nvs_set_i64(handle, key, value);
+    if (ret == ESP_OK)
+    {
+        ret = nvs_commit(handle);
+        if (ret == ESP_OK)
+        {
+            ESP_LOGI(TAG, "Set i64 success [ns: %s, key: %s, value: %lld]", ns_name, key, value);
+        }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Set i64 failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
+    }
+    __nvs_custom_close(handle);
+    return ret;
+}
+
+esp_err_t nvs_custom_get_i64(const char *part_name, const char *ns_name, const char *key, int64_t *out_value)
+{
+    if (key == NULL || out_value == NULL)
+        return ESP_ERR_INVALID_ARG;
+    nvs_handle_t handle;
+    esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
+    if (ret != ESP_OK)
+        return ret;
+    ret = nvs_get_i64(handle, key, out_value);
+    if (ret == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Get i64 success [ns: %s, key: %s, value: %lld]", ns_name, key, *out_value);
+    }
+    else if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        ESP_LOGW(TAG, "Get i64 failed: key not found [ns: %s, key: %s]", ns_name, key);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Get i64 failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
+    }
+    __nvs_custom_close(handle);
+    return ret;
+}
+
 // -------------------------- 字符串类型封装 --------------------------
 esp_err_t nvs_custom_set_str(const char *part_name, const char *ns_name, const char *key, const char *value)
 {
@@ -478,6 +578,71 @@ esp_err_t nvs_custom_get_str(const char *part_name, const char *ns_name, const c
     __nvs_custom_close(handle);
     return ret;
 }
+
+// -------------------------- 数组类型封装 --------------------------
+esp_err_t nvs_custom_set_blob(const char *part_name, const char *ns_name, const char *key, const void *value, size_t value_size)
+{
+    if (key == NULL || value == NULL || value_size == 0)
+    {
+        ESP_LOGE(TAG, "Invalid param: key/value is NULL or value_size is 0");
+        return ESP_ERR_INVALID_ARG;
+    }
+    nvs_handle_t handle;
+    esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
+    if (ret != ESP_OK)
+        return ret;
+    // 调用原生接口写入blob
+    ret = nvs_set_blob(handle, key, value, value_size);
+    if (ret == ESP_OK)
+    {
+        ret = nvs_commit(handle);
+        if (ret == ESP_OK)
+        {
+            ESP_LOGI(TAG, "Set blob success [ns: %s, key: %s, size: %zu]", ns_name, key, value_size);
+        }
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Set blob failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
+    }
+    __nvs_custom_close(handle);
+    return ret;
+}
+
+esp_err_t nvs_custom_get_blob(const char *part_name, const char *ns_name, const char *key, void *out_buf, size_t *buf_size)
+{
+    if (key == NULL || out_buf == NULL || buf_size == NULL || *buf_size == 0)
+    {
+        ESP_LOGE(TAG, "Invalid param: key/out_buf/buf_size is NULL or *buf_size is 0");
+        return ESP_ERR_INVALID_ARG;
+    }
+    nvs_handle_t handle;
+    esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
+    if (ret != ESP_OK)
+        return ret;
+    // 调用原生接口读取blob
+    ret = nvs_get_blob(handle, key, out_buf, buf_size);
+    if (ret == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Get blob success [ns: %s, key: %s, size: %zu]", ns_name, key, *buf_size);
+    }
+    else if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        ESP_LOGW(TAG, "Get blob failed: key not found [ns: %s, key: %s]", ns_name, key);
+    }
+    else if (ret == ESP_ERR_NVS_INVALID_LENGTH)
+    {
+        ESP_LOGE(TAG, "Get blob failed: buffer too small [need: %zu, current: %zu]",
+                 *buf_size, *buf_size); // 原生会将需要的长度写入buf_size
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Get blob failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
+    }
+    __nvs_custom_close(handle);
+    return ret;
+}
+
 
 // -------------------------- 删除操作封装 --------------------------
 esp_err_t nvs_custom_erase_key(const char *part_name, const char *ns_name, const char *key)

@@ -81,10 +81,10 @@ struct fingerprint_device
     uint8_t fingerNumber;
 };
 
-extern bool g_readyAddFingerprint;                                    // 准备添加指纹标志
-extern bool g_cancelAddFingerprint;                                   // 取消添加指纹标志
-extern bool g_readyDeleteFingerprint;                                 // 准备删除指纹标志
-extern bool g_readyDeleteAllFingerprint;                              // 准备删除所有指纹标志
+extern bool g_ready_add_fingerprint;                                  // 准备添加指纹标志
+extern bool g_cancel_add_fingerprint;                                 // 取消添加指纹标志
+extern bool g_ready_delete_fingerprint;                               // 准备删除指纹标志
+extern bool g_ready_delete_all_fingerprint;                           // 准备删除所有指纹标志
 extern uint8_t g_deleteFingerprintID;                                 // 准备删除的指纹ID
 extern void send_fingerprint_list();                                  // 发送当前指纹列表到前端
 extern void send_operation_result(const char *message, bool success); // 发送操作结果到前端
@@ -100,6 +100,5 @@ void prepare_turn_off_fingerprint();
 void cancel_current_operation_and_execute_command();
 esp_err_t fingerprint_initialization_uart();
 esp_err_t fingerprint_deinitialization_uart();
-
 
 #endif

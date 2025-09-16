@@ -6,21 +6,17 @@
 #include "app_config.h"
 #include <cJSON.h>
 #include "zw111.h"
+#include "nvs_custom.h"
 
 #define CSS_PATH "/spiffs/style.css"
 #define FAVICON_PATH "/spiffs/favicon.ico"
 #define WS_RECV_BUFFER_SIZE 128
-#define MAX_CARDS 20
 #define MAX_WS_CLIENTS 5
 
 extern struct fingerprint_device zw111; // 指纹设备全局变量
 
-// 卡片数据结构
-typedef struct
-{
-    int id;
-    char cardNumber[9]; // 8位卡号
-} CardInfo;
+extern uint64_t g_card_id_value[MAX_CARDS];
+extern int g_card_count;
 
 httpd_handle_t web_server_start(void);
 

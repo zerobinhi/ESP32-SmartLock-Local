@@ -79,6 +79,26 @@ esp_err_t nvs_custom_set_u32(const char *part_name, const char *ns_name, const c
  */
 esp_err_t nvs_custom_get_u32(const char *part_name, const char *ns_name, const char *key, uint32_t *out_value);
 
+/**
+ * @brief 写入uint64_t到NVS（自动处理命名空间打开/关闭）
+ * @param part_name NVS分区名（默认传NULL）
+ * @param ns_name 命名空间名
+ * @param key 数据键名
+ * @param value 要写入的uint64_t值
+ * @return esp_err_t 错误码
+ */
+esp_err_t nvs_custom_set_u64(const char *part_name, const char *ns_name, const char *key, uint64_t value);
+
+/**
+ * @brief 读取uint64_t从NVS（自动处理命名空间打开/关闭）
+ * @param part_name NVS分区名（默认传NULL）
+ * @param ns_name 命名空间名
+ * @param key 数据键名
+ * @param out_value 输出缓冲区
+ * @return esp_err_t 错误码
+ */
+esp_err_t nvs_custom_get_u64(const char *part_name, const char *ns_name, const char *key, uint64_t *out_value);
+
 // ========================== 有符号整数类型 ==========================
 /**
  * @brief 写入int8_t到NVS（自动处理命名空间打开/关闭）
@@ -139,6 +159,26 @@ esp_err_t nvs_custom_set_i32(const char *part_name, const char *ns_name, const c
  * @return esp_err_t 错误码
  */
 esp_err_t nvs_custom_get_i32(const char *part_name, const char *ns_name, const char *key, int32_t *out_value);
+
+/**
+ * @brief 写入int64_t到NVS（自动处理命名空间打开/关闭）
+ * @param part_name NVS分区名（默认传NULL）
+ * @param ns_name 命名空间名
+ * @param key 数据键名
+ * @param value 要写入的int64_t值
+ * @return esp_err_t 错误码
+ */
+esp_err_t nvs_custom_set_i64(const char *part_name, const char *ns_name, const char *key, int64_t value);
+
+/**
+ * @brief 读取int64_t从NVS（自动处理命名空间打开/关闭）
+ * @param part_name NVS分区名（默认传NULL）
+ * @param ns_name 命名空间名
+ * @param key 数据键名
+ * @param out_value 输出缓冲区
+ * @return esp_err_t 错误码
+ */
+esp_err_t nvs_custom_get_i64(const char *part_name, const char *ns_name, const char *key, int64_t *out_value);
 
 // ========================== 其他常用类型 ==========================
 /**

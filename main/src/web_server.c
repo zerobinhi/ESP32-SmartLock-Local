@@ -7,14 +7,15 @@ static esp_err_t css_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
 static esp_err_t favicon_handler(httpd_req_t *req);
 
-CardInfo card_list[MAX_CARDS] = {0};
-int card_count = 0;
-
 // 标志位，进行操作的时候指纹模块可能处在关机状态，也可能在验证指纹状态
-bool g_readyAddFingerprint = false;
-bool g_cancelAddFingerprint = false;
-bool g_readyDeleteFingerprint = false;
-bool g_readyDeleteAllFingerprint = false;
+bool g_ready_add_fingerprint = false;
+bool g_cancel_add_fingerprint = false;
+bool g_ready_delete_fingerprint = false;
+bool g_ready_delete_all_fingerprint = false;
+bool g_ready_add_card = false;
+bool g_ready_delete_card = false;
+char g_add_card_number[9] = {0};
+char g_delete_card_number[9] = {0};
 
 uint8_t g_deleteFingerprintID = 0;
 httpd_handle_t server = NULL;
@@ -174,21 +175,27 @@ static esp_err_t ws_handler(httpd_req_t *req)
     {
         ESP_LOGI(TAG, "处理添加卡片命令");
         // 检查是否还有空间
-        if (card_count < MAX_CARDS)
+        if (g_card_count < MAX_CARDS)
         {
-            // 模拟添加卡片
-            CardInfo new_card = {
-                .id = card_count + 1,
-                .cardNumber = "1A2B3C4D" // 示例卡号
-            };
-            card_list[card_count++] = new_card;
-            send_card_list(); // 发送更新后的卡片列表
-            send_status_msg("卡片添加成功");
+            g_ready_add_card = true;
         }
         else
         {
             send_status_msg("卡片数量已达上限");
         }
+    }
+    else if (strcmp(recv_buf, "cancel_add_card") == 0)
+    {
+        ESP_LOGI(TAG, "处理取消添加卡片命令");
+        g_ready_add_card = false;
+    }
+    else if (strstr(recv_buf, "delete_card:") != NULL)
+    {
+        char *prefix = "delete_card:";
+        strncpy(g_delete_card_number, recv_buf + strlen(prefix), sizeof(g_delete_card_number) - 1);
+        g_delete_card_number[sizeof(g_delete_card_number) - 1] = '\0';
+        ESP_LOGI(TAG, "处理删除指定卡片命令，卡号: %s", g_delete_card_number);
+        g_ready_delete_card = true;
     }
     else if (strcmp(recv_buf, "add_fingerprint") == 0)
     {
@@ -199,7 +206,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
             if (zw111.power == true)
             {
                 cancel_current_operation_and_execute_command();
-                g_readyAddFingerprint = true;
+                g_ready_add_fingerprint = true;
             }
             else
             {
@@ -215,21 +222,20 @@ static esp_err_t ws_handler(httpd_req_t *req)
     else if (strcmp(recv_buf, "cancel_add_fingerprint") == 0)
     {
         ESP_LOGI(TAG, "处理取消添加指纹命令");
-        g_cancelAddFingerprint = true;
+        g_cancel_add_fingerprint = true;
         cancel_current_operation_and_execute_command();
     }
     else if (strcmp(recv_buf, "clear_cards") == 0)
     {
         ESP_LOGI(TAG, "处理清空卡片命令");
-        card_count = 0;
-        memset(card_list, 0, sizeof(card_list));
-        send_card_list();
+        g_card_count = 0;
+        nvs_custom_set_u8(NULL, "card", "count", g_card_count);
         send_status_msg("卡片已清空");
     }
     else if (strcmp(recv_buf, "clear_fingerprints") == 0)
     {
         ESP_LOGI(TAG, "处理清空指纹命令, 当前模组状态: %u", zw111.state);
-        g_readyDeleteAllFingerprint = true;
+        g_ready_delete_all_fingerprint = true;
         if (zw111.power == true)
         {
             cancel_current_operation_and_execute_command();
@@ -255,7 +261,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         char *prefix = "delete_fingerprint:";
         g_deleteFingerprintID = atoi(recv_buf + strlen(prefix));
         ESP_LOGI(TAG, "处理删除指定指纹命令，ID: %u，当前模组状态: %u", g_deleteFingerprintID, zw111.state);
-        g_readyDeleteFingerprint = true;
+        g_ready_delete_fingerprint = true;
         if (zw111.power == true)
         {
             cancel_current_operation_and_execute_command();
@@ -342,11 +348,10 @@ void send_card_list()
 {
     cJSON *root = cJSON_CreateObject();
     cJSON *data_array = cJSON_CreateArray();
-    for (int i = 0; i < card_count; i++)
+    for (int i = 0; i < g_card_count; i++)
     {
         cJSON *item = cJSON_CreateObject();
-        cJSON_AddNumberToObject(item, "id", card_list[i].id);
-        cJSON_AddStringToObject(item, "cardNumber", card_list[i].cardNumber);
+        cJSON_AddNumberToObject(item, "cardNumber", g_card_id_value[i]);
         cJSON_AddItemToArray(data_array, item);
     }
     cJSON_AddStringToObject(root, "type", "card_list");
@@ -395,13 +400,13 @@ void send_init_data()
     cJSON *cards_array = cJSON_CreateArray();
     cJSON *fingers_array = cJSON_CreateArray();
     // 添加卡片数据
-    for (int i = 0; i < card_count; i++)
+    for (int i = 0; i < g_card_count; i++)
     {
         cJSON *item = cJSON_CreateObject();
-        cJSON_AddNumberToObject(item, "id", card_list[i].id);
-        cJSON_AddStringToObject(item, "cardNumber", card_list[i].cardNumber);
+        cJSON_AddNumberToObject(item, "cardNumber", g_card_id_value[i]);
         cJSON_AddItemToArray(cards_array, item);
     }
+
     // 添加指纹数据
     for (int i = 0; i < zw111.fingerNumber; i++)
     {

@@ -23,6 +23,8 @@
 #define I2C_MASTER_FREQ_HZ 400000 /*!< I2C master clock frequency */
 #define PN532_I2C_ADDRESS ((uint8_t)0x24)
 
+#define MAX_CARDS 20
+
 #define true 1
 #define false 0
 
