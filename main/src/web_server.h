@@ -31,4 +31,4 @@ void send_status_msg(const char *message);
 void send_init_data();
 void send_operation_result(const char *message, bool success);
 
-#endif // WEB_SERVER_H
+#endif

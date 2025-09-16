@@ -7,8 +7,6 @@
 #include <esp_err.h>
 #include <esp_log.h>
 
-#define DEBUG
-
 #define INDEX_HTML_BUFFER_SIZE 32768
 #define RESPONSE_DATA_BUFFER_SIZE 32768
 
@@ -28,4 +26,4 @@
 #define true 1
 #define false 0
 
-#endif // APP_CONFIG_H
+#endif
