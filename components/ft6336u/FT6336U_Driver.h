@@ -30,4 +30,4 @@ typedef struct
 
 esp_err_t ft6336u_read_touch_pos(FT6336U_TOUCH_POS *touch_pos);
 
-#endif // __FT6336U_DRIVER_H_
+#endif

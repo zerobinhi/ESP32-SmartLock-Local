@@ -230,7 +230,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "处理清空卡片命令");
         g_card_count = 0;
         nvs_custom_set_u8(NULL, "card", "count", g_card_count);
-        send_status_msg("卡片已清空");
+        send_operation_result("card_cleared", true); // 发送操作结果
     }
     else if (strcmp(recv_buf, "clear_fingerprints") == 0)
     {
@@ -414,7 +414,12 @@ void send_init_data()
         cJSON_AddNumberToObject(item, "templateId", zw111.fingerIDArray[i]);
         cJSON_AddItemToArray(fingers_array, item);
     }
+
     cJSON_AddStringToObject(root, "type", "init_data");
+
+    // 添加版本号
+    cJSON_AddStringToObject(root, "version", CONFIG_APP_PROJECT_VER);
+
     cJSON_AddItemToObject(root, "cards", cards_array);
     cJSON_AddItemToObject(root, "fingers", fingers_array);
     ws_broadcast_json(root);

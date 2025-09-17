@@ -11,4 +11,4 @@ extern char *index_html; // 动态分配缓冲区
 
 void spiffs_init_and_load_webpage(void);
 
-#endif // SPIFFS_H
+#endif

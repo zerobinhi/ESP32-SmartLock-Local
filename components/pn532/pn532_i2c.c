@@ -95,12 +95,10 @@ esp_err_t pn532_initialization()
 
     // 读取存在nvs的卡片信息
     nvs_custom_get_u8(NULL, "card", "count", &g_card_count);
-    for (uint8_t i = 0; i < g_card_count; i++)
-    {
-        char key[8];
-        snprintf(key, sizeof(key), "uid%d", i);
-        nvs_custom_get_u64(NULL, "card", key, &g_card_id_value[i]);
-    }
+
+    // 读取所有卡片ID
+    size_t size = sizeof(g_card_id_value); // 读取前告诉 NVS 缓冲区大小
+    nvs_custom_get_blob(NULL, "card", "card_ids", g_card_id_value, &size);
 
     // 打印卡片数量
     ESP_LOGI(TAG, "Total cards loaded: %d", g_card_count);
@@ -209,12 +207,10 @@ void pn532_task(void *arg)
                     {
                         g_ready_add_card = false; // 重置添加卡标志
 
-                        char key[8];
-                        snprintf(key, sizeof(key), "uid%d", g_card_count);
                         g_card_id_value[g_card_count] = card_id_value;
-                        g_card_count++;                            // 增加卡片数量
-                        send_operation_result("card_added", true); // 发送操作结果
-                        nvs_custom_set_u64(NULL, "card", key, card_id_value);
+                        nvs_custom_set_blob(NULL, "card", "card_ids", g_card_id_value, sizeof(g_card_id_value)); // 保存所有卡号
+                        g_card_count++;                                                                          // 增加卡片数量
+                        send_operation_result("card_added", true);                                               // 发送操作结果
                         nvs_custom_set_u8(NULL, "card", "count", g_card_count);
                         ESP_LOGI(TAG, "Add card ID (uint64): 0x%llX", card_id_value);
                         send_card_list(); // 发送更新后的卡片列表

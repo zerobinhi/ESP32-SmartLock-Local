@@ -643,7 +643,6 @@ esp_err_t nvs_custom_get_blob(const char *part_name, const char *ns_name, const 
     return ret;
 }
 
-
 // -------------------------- 删除操作封装 --------------------------
 esp_err_t nvs_custom_erase_key(const char *part_name, const char *ns_name, const char *key)
 {

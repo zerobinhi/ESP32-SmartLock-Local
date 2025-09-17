@@ -22,15 +22,15 @@
 				<div class="card-title">设备信息</div>
 				<div class="status-item">
 					<label>指纹数量</label>
-					<span class="value" id="home-fingerprint-count">0</span>
+					<span class="value" id="home-fingerprint-count"></span>
 				</div>
 				<div class="status-item">
 					<label>卡号数量</label>
-					<span class="value" id="home-card-count">0</span>
+					<span class="value" id="home-card-count"></span>
 				</div>
 				<div class="status-item">
 					<label>固件版本</label>
-					<span class="value">v1.2.0</span>
+					<span class="value" id="firmware-version"></span>
 				</div>
 			</div>
 		</div>
@@ -208,6 +208,7 @@
 						showSuccessToast(data.message);
 						break;
 					case 'init_data':
+						updateVersion(data.version);
 						updateCardData(data.cards);
 						updateFingerprintData(data.fingers);
 						break;
@@ -219,7 +220,7 @@
 							} else {
 								showAlert('指纹添加失败', '好的');
 							}
-						} 
+						}
 						else if (data.message == "card_added") {
 							if (data.result) {
 								Modal.hideAlertModal();                 // ✅ 成功后关闭提示框
@@ -254,6 +255,9 @@
 						}
 						else if (data.message == "card_cleared") {
 							if (data.result) {
+								cardData = [];
+								Modal.updateCardList();
+								Modal.updateCardCount();
 								showSuccessToast('卡片清空成功');
 							} else {
 								showAlert('卡片清空失败', '好的');
@@ -269,6 +273,10 @@
 				console.error('消息解析错误:', error);
 				showAlert('数据接收错误', '重试');
 			}
+		}
+
+		function updateVersion(version) {
+			document.getElementById('firmware-version').textContent = `v${version}`;	
 		}
 
 		function updateCardData(newCards) {

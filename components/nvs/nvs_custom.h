@@ -212,6 +212,28 @@ esp_err_t nvs_custom_get_str(const char *part_name, const char *ns_name, const c
 esp_err_t nvs_custom_erase_key(const char *part_name, const char *ns_name, const char *key);
 
 /**
+ * @brief 写入二进制大对象（blob）到NVS（自动处理命名空间打开/关闭）
+ * @param part_name NVS分区名（默认传NULL）
+ * @param ns_name 命名空间名
+ * @param key 数据键名
+ * @param value 指向要写入数据的指针
+ * @param value_size 要写入数据的字节大小
+ * @return esp_err_t 错误码
+ */
+esp_err_t nvs_custom_set_blob(const char *part_name, const char *ns_name, const char *key, const void *value, size_t value_size);
+
+/**
+ * @brief 读取二进制大对象（blob）从NVS（自动处理命名空间打开/关闭）
+ * @param part_name NVS分区名（默认传NULL）
+ * @param ns_name 命名空间名
+ * @param key 数据键名
+ * @param out_buf 输出缓冲区（存储读取到的数据）
+ * @param buf_size 输入：缓冲区大小；输出：实际读取到的数据大小
+ * @return esp_err_t 错误码：ESP_ERR_NVS_INVALID_LENGTH=缓冲区不足
+ */
+esp_err_t nvs_custom_get_blob(const char *part_name, const char *ns_name, const char *key, void *out_buf, size_t *buf_size);
+
+/**
  * @brief 删除NVS中指定命名空间的所有键（自动处理命名空间打开/关闭）
  * @param part_name NVS分区名（默认传NULL）
  * @param ns_name 命名空间名

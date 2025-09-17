@@ -2,6 +2,9 @@
 
 static const char *TAG = "SmartLock WiFi";
 
+char AP_SSID[32];
+char AP_PASS[64];
+
 /**
  * @brief WiFi事件处理器
  */
@@ -37,15 +40,21 @@ void wifi_init_softap(void)
                                                         &wifi_event_handler,
                                                         NULL,
                                                         NULL));
+
+    size_t ssid_len = sizeof(AP_SSID);
+    size_t pass_len = sizeof(AP_PASS);
+    nvs_custom_get_str(NULL, "wifi", "wifi_ssid", AP_SSID, &ssid_len);
+    nvs_custom_get_str(NULL, "wifi", "wifi_pass", AP_PASS, &pass_len);
+
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = AP_SSID,
             .ssid_len = strlen(AP_SSID),
             .channel = AP_CHANNEL,
-            .password = AP_PASS,
             .max_connection = MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK},
     };
+    strncpy((char *)wifi_config.ap.ssid, AP_SSID, sizeof(wifi_config.ap.ssid));
+    strncpy((char *)wifi_config.ap.password, AP_PASS, sizeof(wifi_config.ap.password));
     if (strlen(AP_PASS) == 0)
     {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
