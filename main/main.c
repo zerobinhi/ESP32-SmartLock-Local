@@ -26,8 +26,8 @@ void app_main(void)
 
     wifi_init_softap();
     spiffs_init_and_load_webpage();
-    web_server_start();    // 启动Web服务器
-    
+    web_server_start(); // 启动Web服务器
+
     // 初始化指纹模块
     if (fingerprint_initialization() != ESP_OK)
     {

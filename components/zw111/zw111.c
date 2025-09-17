@@ -15,6 +15,8 @@ static QueueHandle_t uart2_queue;               // UART2事件队列
 
 static const char *TAG = "SmartLock Fingerprint";
 
+uint8_t way_to_open = 0; // 开锁方式：0=无效；1=指纹；2=密码；4=刷卡；8=APP
+
 // ========================== 通用工具函数 ==========================
 /**
  * @brief 计算数据帧的校验和
@@ -883,7 +885,61 @@ esp_err_t fingerprint_initialization()
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&fingerprint_ctl_gpio_config);
-    buzzer_queue = xQueueCreate(10, sizeof(uint8_t)); // 用于存储蜂鸣器鸣叫的方式
+
+    gpio_config_t fingerprint_led_gpio_config = {
+        .pin_bit_mask = (1ULL << FINGERPRINT_LED_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE};
+    gpio_config(&fingerprint_led_gpio_config);
+
+    gpio_config_t app_led_gpio_config = {
+        .pin_bit_mask = (1ULL << APP_LED_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE};
+    gpio_config(&app_led_gpio_config);
+
+    gpio_config_t password_led_gpio_config = {
+        .pin_bit_mask = (1ULL << PASSWORD_LED_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE};
+    gpio_config(&password_led_gpio_config);
+
+    gpio_config_t card_led_gpio_config = {
+        .pin_bit_mask = (1ULL << CARD_LED_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE};
+    gpio_config(&card_led_gpio_config);
+
+    gpio_config_t lock_ctl_gpio_config = {
+        .pin_bit_mask = (1ULL << LOCK_CTL_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE};
+    gpio_config(&lock_ctl_gpio_config);
+
+    gpio_config_t buzzer_ctl_gpio_config = {
+        .pin_bit_mask = (1ULL << BUZZER_CTL_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE};
+    gpio_config(&buzzer_ctl_gpio_config);
+
+    gpio_set_level(FINGERPRINT_LED_PIN, 1); // 熄灭指纹指示灯
+    gpio_set_level(APP_LED_PIN, 1);         // 熄灭APP指示灯
+    gpio_set_level(PASSWORD_LED_PIN, 1);    // 熄灭密码指示灯
+    gpio_set_level(CARD_LED_PIN, 1);        // 熄灭刷卡指示灯
+
+    buzzer_queue = xQueueCreate(1, sizeof(uint8_t)); // 用于存储蜂鸣器鸣叫的方式
     fingerprint_semaphore = xSemaphoreCreateBinary(); // 仅用于触摸之后开启模块
     if (g_gpio_isr_service_installed == false)
     {
@@ -912,15 +968,54 @@ void buzzer_task(void *pvParameters)
     {
         if (xQueueReceive(buzzer_queue, &receivedMessage, (TickType_t)portMAX_DELAY) == pdPASS)
         {
-            // ESP_LOGI(TAG, "receivedMessage: %u", receivedMessage);
+            ESP_LOGI(TAG, "buzzer receivedMessage: %u", receivedMessage);
             if (receivedMessage == BUZZER_OPEN) // 开门成功音
             {
-                // gpio_set_level(LOCK_CTL_PIN, 1); // 给 电磁锁 通电
-                // gpio_set_level(BUZZER_CTL_PIN, 0);
-                vTaskDelay(pdMS_TO_TICKS(800));
-                // gpio_set_level(BUZZER_CTL_PIN, 1);
-                // gpio_set_level(LOCK_CTL_PIN, 0); // 给 电磁锁 断电
-                prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                gpio_set_level(LOCK_CTL_PIN, 1);   // 给电磁锁通电
+                gpio_set_level(BUZZER_CTL_PIN, 0); // 蜂鸣器响
+
+                if (way_to_open & 0x01) // way_to_open的第一位是1
+                {
+                    gpio_set_level(FINGERPRINT_LED_PIN, 0); // 点亮指纹指示灯
+                }
+                else if (way_to_open & 0x02) // way_to_open的第二位是1
+                {
+                    gpio_set_level(APP_LED_PIN, 0); // 点亮APP指示灯
+                }
+                else if (way_to_open & 0x04) // way_to_open的第三位是1
+                {
+                    gpio_set_level(PASSWORD_LED_PIN, 0); // 点亮密码指示灯
+                }
+                else if (way_to_open & 0x08) // way_to_open的第四位是1
+                {
+                    gpio_set_level(CARD_LED_PIN, 0); // 点亮刷卡指示灯
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(800)); // 延时800ms
+
+                if (way_to_open & 0x01)
+                {
+                    way_to_open = 0;                        // 清除开门方式
+                    gpio_set_level(FINGERPRINT_LED_PIN, 1); // 熄灭指纹指示灯
+                    prepare_turn_off_fingerprint();         // 准备关闭指纹模块
+                }
+                else if (way_to_open & 0x02)
+                {
+                    way_to_open = 0;                // 清除开门方式
+                    gpio_set_level(APP_LED_PIN, 1); // 熄灭APP指示灯
+                }
+                else if (way_to_open & 0x04)
+                {
+                    way_to_open = 0;                     // 清除开门方式
+                    gpio_set_level(PASSWORD_LED_PIN, 1); // 熄灭密码指示灯
+                }
+                else if (way_to_open & 0x08)
+                {
+                    way_to_open = 0;                 // 清除开门方式
+                    gpio_set_level(CARD_LED_PIN, 1); // 熄灭刷卡指示灯
+                }
+                gpio_set_level(BUZZER_CTL_PIN, 1); // 蜂鸣器停止
+                gpio_set_level(LOCK_CTL_PIN, 0);   // 给电磁锁断电
             }
             else if (receivedMessage == BUZZER_NOOPEN) // 不开门音
             {
@@ -1117,26 +1212,27 @@ void uart_task(void *pvParameters)
                     {
                         if (dtmp[9] == 0x00)
                         {
+                            way_to_open = 0x01; // 通过指纹开门
+                            xQueueSend(buzzer_queue, &BUZZER_OPEN, portMAX_DELAY);
                             uint16_t fingerID = (dtmp[11] << 8) | dtmp[12]; // 指纹ID
                             uint16_t score = (dtmp[13] << 8) | dtmp[14];    // 得分
                             ESP_LOGI(TAG, "验证指纹-搜到了指纹, 指纹ID: %u, 得分: %u", fingerID, score);
-                            xQueueSend(buzzer_queue, &BUZZER_OPEN, pdMS_TO_TICKS(10));
                         }
                         else if (dtmp[9] == 0x09)
                         {
                             ESP_LOGI(TAG, "验证指纹-没搜索到指纹");
-                            xQueueSend(buzzer_queue, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
+                            xQueueSend(buzzer_queue, &BUZZER_NOOPEN, portMAX_DELAY);
                         }
                         else if (dtmp[9] == 0x24)
                         {
                             ESP_LOGW(TAG, "验证指纹-指纹库为空");
-                            xQueueSend(buzzer_queue, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
+                            xQueueSend(buzzer_queue, &BUZZER_NOOPEN, portMAX_DELAY);
                         }
                     }
                     else if (dtmp[10] == 0x02 && dtmp[9] == 0x09)
                     {
                         ESP_LOGW(TAG, "验证指纹-传感器上没有手指");
-                        xQueueSend(buzzer_queue, &BUZZER_NOOPEN, pdMS_TO_TICKS(10));
+                        xQueueSend(buzzer_queue, &BUZZER_NOOPEN, portMAX_DELAY);
                     }
                     else
                     {

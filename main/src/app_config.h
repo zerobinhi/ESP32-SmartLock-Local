@@ -23,6 +23,16 @@
 #define I2C_MASTER_FREQ_HZ 400000 /*!< I2C master clock frequency */
 #define PN532_I2C_ADDRESS ((uint8_t)0x24)
 
+#define LOCK_CTL_PIN 2
+#define BUZZER_CTL_PIN 14
+
+#define FINGERPRINT_LED_PIN 13
+#define PASSWORD_LED_PIN 32
+#define CARD_LED_PIN 22
+#define APP_LED_PIN 23
+
+#define BATTERY_PIN 34
+
 #define MAX_CARDS 20
 
 #define true 1

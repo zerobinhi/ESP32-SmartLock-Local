@@ -222,6 +222,22 @@ void pn532_task(void *arg)
                         ESP_LOGI(TAG, "Card already exists: 0x%llX", card_id_value);
                     }
                 }
+                else // 非添加卡操作，也就是识别卡操作
+                {
+                    if (find_card_id(card_id_value) == 0) // 未找到此卡
+                    {
+                        ESP_LOGI(TAG, "Unknown card: 0x%llX", card_id_value);
+                        uint8_t buzzer_open = 0;
+                        xQueueSend(buzzer_queue, &buzzer_open, portMAX_DELAY);
+                    }
+                    else // 卡已存在
+                    {
+                        uint8_t buzzer_open = 1;
+                        ESP_LOGI(TAG, "Recognized card: 0x%llX", card_id_value);
+                        way_to_open = 0x02; // 通过刷卡开门
+                        xQueueSend(buzzer_queue, &buzzer_open, portMAX_DELAY);
+                    }
+                }
 
                 uint8_t ack[7] = {0};
                 pn532_send_command_and_receive(g_cmd_detect_card, sizeof(g_cmd_detect_card), ack, sizeof(ack)); // 让pn532准备读取下一张卡

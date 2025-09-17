@@ -15,6 +15,8 @@ extern bool g_ready_add_card;
 extern bool g_ready_delete_card;
 extern char g_add_card_number[9];
 extern char g_delete_card_number[9];
+extern uint8_t way_to_open;
+extern QueueHandle_t buzzer_queue;
 
 extern void send_card_list();                                         // 发送当前卡片列表到前端
 extern void send_operation_result(const char *message, bool success); // 发送操作结果到前端
