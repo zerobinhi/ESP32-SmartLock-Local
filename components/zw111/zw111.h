@@ -4,6 +4,7 @@
 #include <driver/uart.h>
 #include <driver/gpio.h>
 #include "app_config.h"
+#include "buzzer.h"
 
 // ========================== 硬件配置宏 ==========================
 #define EX_UART_NUM UART_NUM_2        // 指纹模块使用的UART端口
@@ -89,10 +90,10 @@ extern uint8_t g_deleteFingerprintID;                                 // 准备�
 extern void send_fingerprint_list();                                  // 发送当前指纹列表到前端
 extern void send_operation_result(const char *message, bool success); // 发送操作结果到前端
 extern bool g_gpio_isr_service_installed;                             // 是否安装了GPIO中断服务
+extern QueueHandle_t fingerprint_queue; // 指纹模块→蜂鸣器的消息队列
 
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);
-void buzzer_task(void *pvParameters);
 esp_err_t fingerprint_initialization();
 esp_err_t delete_char(uint16_t ID, uint16_t count);
 void turn_on_fingerprint();

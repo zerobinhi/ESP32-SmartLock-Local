@@ -24,7 +24,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
     uint32_t gpio_num = (uint32_t)arg;
     if (gpio_num == PN532_INT_PIN && gpio_get_level(PN532_INT_PIN) == 0)
     {
-        ESP_EARLY_LOGI(TAG, "pn532模块中断触发, gpio_num=%u", gpio_num);
+        // ESP_EARLY_LOGI(TAG, "pn532模块中断触发, gpio_num=%u", gpio_num);
         xSemaphoreGiveFromISR(pn532_semaphore, NULL);
     }
 }
@@ -228,14 +228,15 @@ void pn532_task(void *arg)
                     {
                         ESP_LOGI(TAG, "Unknown card: 0x%llX", card_id_value);
                         uint8_t buzzer_open = 0;
-                        xQueueSend(buzzer_queue, &buzzer_open, portMAX_DELAY);
+                        uint8_t message = 0x00;
+                        xQueueSend(card_queue, &message, portMAX_DELAY);
                     }
-                    else // 卡已存在
+                    else // 卡在库中
                     {
                         uint8_t buzzer_open = 1;
                         ESP_LOGI(TAG, "Recognized card: 0x%llX", card_id_value);
-                        way_to_open = 0x02; // 通过刷卡开门
-                        xQueueSend(buzzer_queue, &buzzer_open, portMAX_DELAY);
+                        uint8_t message = 0x01;
+                        xQueueSend(card_queue, &message, portMAX_DELAY);
                     }
                 }
 
@@ -243,7 +244,6 @@ void pn532_task(void *arg)
                 pn532_send_command_and_receive(g_cmd_detect_card, sizeof(g_cmd_detect_card), ack, sizeof(ack)); // 让pn532准备读取下一张卡
                 res[0] = 0x00;
             }
-            xSemaphoreTake(pn532_semaphore, portMAX_DELAY);
         }
     }
 }
