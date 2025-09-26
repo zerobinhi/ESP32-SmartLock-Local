@@ -23,6 +23,9 @@
 #define I2C_MASTER_FREQ_HZ 400000 /*!< I2C master clock frequency */
 #define PN532_I2C_ADDRESS ((uint8_t)0x24)
 
+#define FT6336U_RST_PIN 21 /*!< GPIO for FT6336U reset */
+#define FT6336U_INT_PIN 19 /*!< GPIO for FT6336U interrupt */
+
 #define LOCK_CTL_PIN 2
 #define BUZZER_CTL_PIN 14
 

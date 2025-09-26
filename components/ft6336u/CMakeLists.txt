@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "FT6336U_Driver.c"
+    SRCS "ft6336u.c"
     INCLUDE_DIRS "."
     REQUIRES driver main
 )

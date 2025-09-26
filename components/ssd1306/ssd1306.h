@@ -26,7 +26,7 @@ extern "C"
 #define SSD1306_WIDTH               128
 #define SSD1306_HEIGHT              64
 
-extern i2c_master_bus_handle_t bus_handle;
+extern i2c_master_bus_handle_t pn532_handle;
 extern i2c_master_dev_handle_t oled_handle;
 
 

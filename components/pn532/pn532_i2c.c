@@ -6,6 +6,7 @@ i2c_master_bus_handle_t bus_handle;   // I2C主设备句柄
 i2c_master_dev_handle_t pn532_handle; // I2C从设备句柄
 
 bool g_gpio_isr_service_installed = false; // 是否安装了GPIO中断服务
+bool g_i2c_service_installed = false;      // 是否安装了I2C服务
 
 uint64_t g_card_id_value[MAX_CARDS] = {0};                                                        // 卡号的数值形式
 uint8_t g_card_count = 0;                                                                         // 卡的数量
@@ -43,16 +44,21 @@ esp_err_t pn532_initialization()
         ESP_LOGE("PN532", "Failed to create semaphore");
         return ESP_FAIL;
     }
-    // 初始化I2C
-    i2c_master_bus_config_t i2c_mst_config = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = I2C_MASTER_NUM,
-        .scl_io_num = I2C_MASTER_SCL_IO,
-        .sda_io_num = I2C_MASTER_SDA_IO,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-    };
-    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
+    if (g_i2c_service_installed == false)
+    {
+        // 初始化I2C
+        i2c_master_bus_config_t i2c_mst_config = {
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .i2c_port = I2C_MASTER_NUM,
+            .scl_io_num = I2C_MASTER_SCL_IO,
+            .sda_io_num = I2C_MASTER_SDA_IO,
+            .glitch_ignore_cnt = 7,
+            .flags.enable_internal_pullup = true,
+        };
+        ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
+        g_i2c_service_installed = true;
+    }
+
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = PN532_I2C_ADDRESS,
@@ -129,9 +135,9 @@ esp_err_t pn532_send_command_and_receive(const uint8_t *cmd, size_t cmd_len, uin
     }
     if (cmd != NULL && cmd_len > 0)
     {
-        i2c_master_transmit(pn532_handle, cmd, cmd_len, portMAX_DELAY);
+        i2c_master_transmit(pn532_handle, cmd, cmd_len, -1);
         vTaskDelay(pdMS_TO_TICKS(20)); // 延迟等待模块处理
-        i2c_master_receive(pn532_handle, response, response_len, portMAX_DELAY);
+        i2c_master_receive(pn532_handle, response, response_len, -1);
     }
     else
     {
@@ -227,13 +233,11 @@ void pn532_task(void *arg)
                     if (find_card_id(card_id_value) == 0) // 未找到此卡
                     {
                         ESP_LOGI(TAG, "Unknown card: 0x%llX", card_id_value);
-                        uint8_t buzzer_open = 0;
                         uint8_t message = 0x00;
                         xQueueSend(card_queue, &message, portMAX_DELAY);
                     }
                     else // 卡在库中
                     {
-                        uint8_t buzzer_open = 1;
                         ESP_LOGI(TAG, "Recognized card: 0x%llX", card_id_value);
                         uint8_t message = 0x01;
                         xQueueSend(card_queue, &message, portMAX_DELAY);

@@ -113,7 +113,7 @@ void fingerprint_send_buzzer_message(void *pvParameters)
                 }
             }
 
-            vTaskDelay(pdMS_TO_TICKS(800));         // 延迟800ms之后关闭指纹模块
+            vTaskDelay(pdMS_TO_TICKS(600));         // 延迟800ms之后关闭指纹模块
             gpio_set_level(FINGERPRINT_LED_PIN, 1); // 熄灭指纹灯
             prepare_turn_off_fingerprint();         // 关闭指纹模块
         }

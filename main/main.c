@@ -6,6 +6,7 @@
 #include "web_server.h"
 #include "zw111.h"
 #include "pn532_i2c.h"
+#include "ft6336u.h"
 #include "nvs_custom.h"
 
 static const char *TAG = "SmartLock Main";
@@ -56,6 +57,16 @@ void app_main(void)
     else
     {
         ESP_LOGI(TAG, "PN532模块初始化成功");
+    }
+
+    // 初始化FT6336U模块
+    if (ft6336u_initialization() != ESP_OK)
+    {
+        ESP_LOGE(TAG, "FT6336U模块初始化失败");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "FT6336U模块初始化成功");
     }
 
     ESP_LOGI(TAG, "智能门锁系统就绪");
