@@ -786,17 +786,16 @@ esp_err_t fingerprint_initialization_uart()
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "UART参数配置失败: 0x%x", ret);
-        uart_driver_delete(EX_UART_NUM); // 回滚操作
+        uart_driver_delete(EX_UART_NUM);
         return ret;
     }
     // 设置UART引脚
     ret = uart_set_pin(EX_UART_NUM, FINGERPRINT_RX_PIN, FINGERPRINT_TX_PIN,
-                       UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE,
                        UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "UART引脚配置失败: 0x%x", ret);
-        uart_driver_delete(EX_UART_NUM); // 回滚操作
+        uart_driver_delete(EX_UART_NUM);
         return ret;
     }
     // 配置模式检测
@@ -804,7 +803,7 @@ esp_err_t fingerprint_initialization_uart()
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "模式检测配置失败: 0x%x", ret);
-        uart_driver_delete(EX_UART_NUM); // 回滚操作
+        uart_driver_delete(EX_UART_NUM);
         return ret;
     }
     // 重置模式队列
@@ -812,7 +811,7 @@ esp_err_t fingerprint_initialization_uart()
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "模式队列重置失败: 0x%x", ret);
-        uart_driver_delete(EX_UART_NUM); // 回滚操作
+        uart_driver_delete(EX_UART_NUM);
         return ret;
     }
     ESP_LOGI(TAG, "UART初始化成功");
