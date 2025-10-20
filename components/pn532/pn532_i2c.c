@@ -80,6 +80,10 @@ esp_err_t pn532_initialization()
     }
     gpio_isr_handler_add(PN532_INT_PIN, gpio_isr_handler, (void *)PN532_INT_PIN);
 
+    gpio_set_level(PN532_RST_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(PN532_RST_PIN, 1);
+
     ESP_LOGI(TAG, "pn532 interrupt gpio configured");
 
     // 让pn532准备读取卡片
@@ -136,7 +140,7 @@ esp_err_t pn532_send_command_and_receive(const uint8_t *cmd, size_t cmd_len, uin
     if (cmd != NULL && cmd_len > 0)
     {
         i2c_master_transmit(pn532_handle, cmd, cmd_len, -1);
-        vTaskDelay(pdMS_TO_TICKS(20)); // 延迟等待模块处理
+        vTaskDelay(pdMS_TO_TICKS(30)); // 延迟等待模块处理
         i2c_master_receive(pn532_handle, response, response_len, -1);
     }
     else

@@ -262,12 +262,12 @@ void buzzer_task(void *pvParameters)
             ESP_LOGI(TAG, "Buzzer received message: %u (1=success, 0=failure)", message);
             if (message == 1)
             {                                      // 开门成功：长鸣1秒+开锁
-                gpio_set_level(BUZZER_CTL_PIN, 0); // 打开蜂鸣器（低电平响）
+                //gpio_set_level(BUZZER_CTL_PIN, 0); // 打开蜂鸣器（低电平响）
                 gpio_set_level(LOCK_CTL_PIN, 1);   // 电磁锁通电开锁
                 ESP_LOGI(TAG, "Buzzer beeping (success) + Lock unlocked");
 
                 vTaskDelay(pdMS_TO_TICKS(1000));   // 保持开锁1秒
-                gpio_set_level(BUZZER_CTL_PIN, 1); // 关闭蜂鸣器
+                //gpio_set_level(BUZZER_CTL_PIN, 1); // 关闭蜂鸣器
                 gpio_set_level(LOCK_CTL_PIN, 0);   // 电磁锁断电关锁
                 ESP_LOGI(TAG, "Buzzer stopped + Lock locked");
             }
@@ -276,14 +276,14 @@ void buzzer_task(void *pvParameters)
                 // 开门失败：短鸣2次（200ms响+100ms停）
                 ESP_LOGI(TAG, "Buzzer beeping (failure)");
                 // 第一次鸣叫
-                gpio_set_level(BUZZER_CTL_PIN, 0);
+                //gpio_set_level(BUZZER_CTL_PIN, 0);
                 vTaskDelay(pdMS_TO_TICKS(200));
-                gpio_set_level(BUZZER_CTL_PIN, 1);
+                //gpio_set_level(BUZZER_CTL_PIN, 1);
                 vTaskDelay(pdMS_TO_TICKS(100));
                 // 第二次鸣叫
-                gpio_set_level(BUZZER_CTL_PIN, 0);
+                //gpio_set_level(BUZZER_CTL_PIN, 0);
                 vTaskDelay(pdMS_TO_TICKS(200));
-                gpio_set_level(BUZZER_CTL_PIN, 1);
+                //gpio_set_level(BUZZER_CTL_PIN, 1);
                 ESP_LOGI(TAG, "Buzzer stopped (failure)");
             }
         }

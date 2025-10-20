@@ -174,6 +174,9 @@ void touch_task(void *arg)
                             uint8_t message = 0x00;
                             xQueueSend(password_queue, &message, portMAX_DELAY);
                         }
+                        memset(g_input_password, 0, sizeof(g_input_password));
+
+                        
                     }
                 }
                 else
@@ -242,8 +245,6 @@ esp_err_t ft6336u_initialization()
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&ft6336u_reset_gpio_config);
 
-    gpio_set_level(FT6336U_RST_PIN, 1);
-
     gpio_config_t ft6336u_int_gpio_config = {
         .pin_bit_mask = (1ULL << FT6336U_INT_PIN),
         .mode = GPIO_MODE_INPUT,
@@ -259,13 +260,24 @@ esp_err_t ft6336u_initialization()
     }
     gpio_isr_handler_add(FT6336U_INT_PIN, gpio_isr_handler, (void *)FT6336U_INT_PIN);
 
+    gpio_set_level(FT6336U_RST_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(FT6336U_RST_PIN, 1);
+
     ESP_LOGI(TAG, "ft6336u interrupt gpio configured");
 
-    // // 读取存在nvs的密码信息
-    // nvs_custom_get_u8(NULL, "card", "count", &g_card_count);
+    size_t buf_len = sizeof(g_touch_password);
 
-    // // 打印当前的密码
-    // ESP_LOGI(TAG, "Total cards loaded: %d", g_card_count);
+    // 读取存在nvs的密码信息
+    if (nvs_custom_get_str(NULL, "pwd", "password", g_touch_password, &buf_len) != ESP_OK)
+    {
+        ESP_LOGI(TAG, "还未设置密码，初始密码为：000000");
+        strcpy(g_touch_password, "000000");
+        nvs_custom_set_str(NULL, "pwd", "password", g_touch_password);
+    }
+
+    // 打印当前的密码
+    ESP_LOGI(TAG, "Current password is: %s", g_touch_password);
 
     // 创建任务
     xTaskCreate(touch_task, "touch_task", 8192, NULL, 10, NULL);

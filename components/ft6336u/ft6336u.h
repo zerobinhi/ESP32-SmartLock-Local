@@ -7,6 +7,7 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <driver/gpio.h>
+#include "nvs_custom.h"
 
 #define FT6336U_I2C_ADDRESS 0x38 // 设备I2C地址
 
