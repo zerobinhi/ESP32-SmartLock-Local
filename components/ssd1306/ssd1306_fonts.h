@@ -1,24 +1,20 @@
-/*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
-#pragma once
+#ifndef SSD1306_FONTS_H_
+#define SSD1306_FONTS_H_
 
 #include "stdint.h"
-/* Exported types ------------------------------------------------------------*/
-/* Exported constants --------------------------------------------------------*/
-/* Exported macro ------------------------------------------------------------*/
-/* Exported functions ------------------------------------------------------- */
+
 extern const uint8_t c_chFont1206[95][12];
 extern const uint8_t c_chFont1608[95][16];
-extern const uint8_t c_chFont1612[11][32];
-extern const uint8_t c_chFont3216[12][64];
-extern const uint8_t c_chBmp4016[96];
+extern const uint8_t c_chFont1612[95][36];
+extern const uint8_t c_chFont3216[95][64];
+extern const unsigned char Hzk[][32];
+extern const uint8_t c_chBmp1640[80];
 extern const uint8_t c_chSingal816[16];
 extern const uint8_t c_chMsg816[16];
-extern const uint8_t c_chBluetooth88[8];
 extern const uint8_t c_chBat816[16];
+extern const uint8_t c_chBluetooth88[8];
 extern const uint8_t c_chGPRS88[8];
 extern const uint8_t c_chAlarm88[8];
+extern unsigned char BMP1[];
+
+#endif /* SSD1306_FONTS_H_ */

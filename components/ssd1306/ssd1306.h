@@ -1,190 +1,98 @@
-/*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Apache-2.0
- */
+#ifndef SSD1306_H_
+#define SSD1306_H_
 
-/**
- * @file
- * @brief SSD1306 driver
- */
-
-#pragma once
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-#include <driver/i2c_master.h>
+#include "driver/i2c_master.h"
 #include "ssd1306_fonts.h"
+#include "esp_err.h"
+#include <stdbool.h>
+#include <stdint.h>
+
+
+/* ================================
+ * SSD1306 OLED 参数定义
+ * ================================ */
+#define SSD1306_WIDTH   128
+#define SSD1306_HEIGHT  64
+
+/* ================================
+ * 初始化与刷新函数
+ * ================================ */
 
 /**
- * @brief  I2C address.
+ * @brief 初始化 SSD1306 OLED 显示屏
+ * 
+ * @param handle 已创建的 i2c_master_dev_handle_t
+ * @return esp_err_t 
  */
-
-#define SSD1306_WIDTH               128
-#define SSD1306_HEIGHT              64
-
-extern i2c_master_bus_handle_t pn532_handle;
-extern i2c_master_dev_handle_t oled_handle;
-
+esp_err_t ssd1306_init(i2c_master_dev_handle_t handle);
 
 /**
- * @brief   device initialization
- *
- * @param   dev object handle of ssd1306
- *
- * @return
- *     - ESP_OK Success
- *     - ESP_FAIL Fail
+ * @brief 刷新显示缓存到 OLED
  */
-esp_err_t ssd1306_init(i2c_master_dev_handle_t dev);
+esp_err_t ssd1306_refresh(i2c_master_dev_handle_t handle);
 
 /**
- * @brief   Create and initialization device object and return a device handle
- *
- * @param   port     I2C port object handle
- * @param   dev_addr I2C device address of device
- *
- * @return
- *     - device object handle of ssd1306
+ * @brief 清空屏幕
+ * @param fill 0 = 黑，1 = 白
  */
-i2c_master_dev_handle_t ssd1306_create(i2c_port_t port, uint16_t dev_addr)
-__attribute__((deprecated("This driver is DEPRECATED. Please use updated SSD1306 driver from ESP-IDF.")));
+void ssd1306_clear_screen(uint8_t fill);
 
 /**
- * @brief   Delete and release a device object
- *
- * @param   dev object handle of ssd1306
+ * @brief 设置对比度
+ * @param contrast 0x00 ~ 0xFF
  */
-void ssd1306_delete(i2c_master_dev_handle_t dev);
+void ssd1306_set_contrast(i2c_master_dev_handle_t handle, uint8_t contrast);
 
 /**
- * @brief   draw point on (x, y)
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos Specifies the X position
- * @param   chYpos Specifies the Y position
- * @param   chPoint fill point
+ * @brief 反转显示（黑白互换）
  */
-void ssd1306_fill_point(i2c_master_dev_handle_t dev, uint8_t chXpos, uint8_t chYpos, uint8_t chPoint);
+void ssd1306_invert_display(i2c_master_dev_handle_t handle, bool invert);
+
+/* ================================
+ * 基础绘图函数
+ * ================================ */
+void ssd1306_draw_point(uint8_t x, uint8_t y, uint8_t color);
+void ssd1306_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color);
+void ssd1306_draw_rect(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color);
+void ssd1306_fill_rect(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color);
+
+/* ================================
+ * 字符与字符串显示
+ * ================================ */
 
 /**
- * @brief   Draw rectangle on (x1,y1)-(x2,y2)
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos1
- * @param   chYpos1
- * @param   chXpos2
- * @param   chYpos2
- * @param   chDot fill point
+ * @brief 显示单个 ASCII 字符
+ * 
+ * @param x 起始x坐标
+ * @param y 起始y坐标
+ * @param chr 字符
+ * @param size 字号（12、16、24、32）
+ * @param color 0=正常，1=反色
  */
-void ssd1306_fill_rectangle(i2c_master_dev_handle_t dev, uint8_t chXpos1, uint8_t chYpos1,
-                            uint8_t chXpos2, uint8_t chYpos2, uint8_t chDot);
+void ssd1306_show_char(uint8_t x, uint8_t y, char chr, uint8_t size, uint8_t color);
 
 /**
- * @brief   display char on (x, y),and set size, mode
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos Specifies the X position
- * @param   chYpos Specifies the Y position
- * @param   chSize char size
- * @param   chChr draw char
- * @param   chMode display mode
+ * @brief 显示字符串
  */
-void ssd1306_draw_char(i2c_master_dev_handle_t dev, uint8_t chXpos,
-                       uint8_t chYpos, uint8_t chChr, uint8_t chSize, uint8_t chMode);
+void ssd1306_show_string(uint8_t x, uint8_t y, const char *str, uint8_t size, uint8_t color);
 
 /**
- * @brief   display number on (x, y),and set length, size, mode
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos Specifies the X position
- * @param   chYpos Specifies the Y position
- * @param   chNum draw num
- * @param   chLen length
- * @param   chSize display size
+ * @brief 显示整数
  */
-void ssd1306_draw_num(i2c_master_dev_handle_t dev, uint8_t chXpos,
-                      uint8_t chYpos, uint32_t chNum, uint8_t chLen, uint8_t chSize);
+void ssd1306_show_num(i2c_master_dev_handle_t oled_handle, uint8_t x, uint8_t y,
+                      int32_t num, uint8_t len, uint8_t size, uint8_t color);
 
 /**
- * @brief   display 1616char on (x, y)
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos Specifies the X position
- * @param   chYpos Specifies the Y position
- * @param   chChar draw char
+ * @brief 显示浮点数
  */
-void ssd1306_draw_1616char(i2c_master_dev_handle_t dev, uint8_t chXpos, uint8_t chYpos, uint8_t chChar);
+void ssd1306_show_decimal(i2c_master_dev_handle_t oled_handle, uint8_t x, uint8_t y,
+                          float num, uint8_t int_len, uint8_t dec_len,
+                          uint8_t size, uint8_t color);
 
-/**
- * @brief   display 3216char on (x, y)
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos Specifies the X position
- * @param   chYpos Specifies the Y position
- * @param   chChar draw char
- */
-void ssd1306_draw_3216char(i2c_master_dev_handle_t dev, uint8_t chXpos, uint8_t chYpos, uint8_t chChar);
+/* ================================
+ * 图像显示
+ * ================================ */
+void ssd1306_draw_bitmap(uint8_t x, uint8_t y,
+                         const uint8_t *bmp, uint8_t w, uint8_t h, uint8_t color);
 
-/**
- * @brief   draw bitmap on (x, y),and set width, height
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos Specifies the X position
- * @param   chYpos Specifies the Y position
- * @param   pchBmp point to BMP data
- * @param   chWidth picture width
- * @param   chHeight picture heght
- */
-void ssd1306_draw_bitmap(i2c_master_dev_handle_t dev, uint8_t chXpos, uint8_t chYpos,
-                         const uint8_t *pchBmp, uint8_t chWidth, uint8_t chHeight);
-
-/**
- * @brief   draw line between two specified points
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos1 Specifies the X position of the starting point of the line
- * @param   chYpos1 Specifies the Y position of the starting point of the line
- * @param   chXpos2 Specifies the X position of the ending point of the line
- * @param   chYpos2 Specifies the Y position of the ending point of the line
- */
-void ssd1306_draw_line(i2c_master_dev_handle_t dev, int16_t chXpos1, int16_t chYpos1, int16_t chXpos2, int16_t chYpos2);
-
-/**
- * @brief   refresh dot matrix panel
- *
- * @param   dev object handle of ssd1306
-
- * @return
- *     - ESP_OK Success
- *     - ESP_FAIL Fail
- **/
-esp_err_t ssd1306_refresh_gram(i2c_master_dev_handle_t dev);
-
-/**
- * @brief   Clear screen
- *
- * @param   dev object handle of ssd1306
- * @param   chFill whether fill and fill char
- **/
-void ssd1306_clear_screen(i2c_master_dev_handle_t dev, uint8_t chFill);
-
-/**
- * @brief   Displays a string on the screen
- *
- * @param   dev object handle of ssd1306
- * @param   chXpos Specifies the X position
- * @param   chYpos Specifies the Y position
- * @param   pchString Pointer to a string to display on the screen
- * @param   chSize char size
- * @param   chMode display mode
- **/
-void ssd1306_draw_string(i2c_master_dev_handle_t dev, uint8_t chXpos, uint8_t chYpos,
-                         const uint8_t *pchString, uint8_t chSize, uint8_t chMode);
-
-#ifdef __cplusplus
-}
-#endif
+#endif /* SSD1306_H_ */
