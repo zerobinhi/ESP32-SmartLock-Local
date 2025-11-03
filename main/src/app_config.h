@@ -22,6 +22,7 @@
 #define I2C_MASTER_NUM I2C_NUM_0  /*!< I2C port number */
 #define I2C_MASTER_FREQ_HZ 400000 /*!< I2C master clock frequency */
 #define PN532_I2C_ADDRESS ((uint8_t)0x24)
+#define OLED_I2C_ADDRESS ((uint8_t)0x3C)
 
 #define FT6336U_RST_PIN 19 /*!< GPIO for FT6336U reset */
 #define FT6336U_INT_PIN 21 /*!< GPIO for FT6336U interrupt */

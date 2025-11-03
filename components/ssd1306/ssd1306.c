@@ -1,270 +1,357 @@
 /**
  * @file ssd1306.c
- * @brief SSD1306 OLED 驱动实现（I2C）
+ * @brief SSD1306 OLED 驱动
+ * @author zerobinhi
+ * @date 2025-11-03
  *
- * 适用于 ESP32 / ESP-IDF
- * 支持：
- * - 点、字符、字符串显示
- * - 整数显示（带前导零，可显示负数）
- * - 浮点数显示（带符号与小数位控制）
- * - 清屏、刷新屏幕
- *
- * @author 
- * @date 2025-10-31
+ * 功能：
+ *  - 单点、线、矩形、填充
+ *  - 显示 ASCII 字符 / 字符串
+ *  - 显示整数、浮点数
+ *  - 显示汉字（16x16 阴码）
+ *  - 显示位图（BMP）
  */
 
 #include "ssd1306.h"
-#include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include "esp_log.h"
 
-static const char *TAG = "SSD1306";
+#define TAG "SSD1306"
 
-/* OLED 显存缓存 */
-static uint8_t oled_buffer[OLED_WIDTH * OLED_HEIGHT / 8] = {0};
+/* SSD1306 控制字节（I2C） */
+#define SSD1306_CTRL_CMD 0x00
+#define SSD1306_CTRL_DAT 0x40
 
-/* 私有函数声明 */
-static void ssd1306_write_cmd(i2c_master_dev_handle_t i2c_handle, uint8_t cmd);
-static void ssd1306_write_data(i2c_master_dev_handle_t i2c_handle, uint8_t data);
-static uint32_t oled_pow(uint8_t x, uint8_t y);
+/* 显存缓存（128x64 -> 128x8页） */
+static uint8_t ssd1306_buffer[SSD1306_WIDTH][8];
 
-/**
- * @brief 初始化 SSD1306 OLED
- * 
- * @param i2c_handle I2C 设备句柄
- */
-void ssd1306_init(i2c_master_dev_handle_t i2c_handle)
+i2c_master_dev_handle_t oled_handle;
+
+/* ============================================================
+ * I2C 底层通信
+ * ============================================================ */
+static esp_err_t _ssd1306_write_cmd(const uint8_t *cmd, size_t len)
 {
-    ESP_LOGI(TAG, "Initializing SSD1306...");
-
-    ssd1306_write_cmd(i2c_handle, 0xAE); // 关闭显示
-    ssd1306_write_cmd(i2c_handle, 0xD5); // 设置显示时钟分频/震荡频率
-    ssd1306_write_cmd(i2c_handle, 0x80); // 默认分频因子
-    ssd1306_write_cmd(i2c_handle, 0xA8); // 设置多路复用率
-    ssd1306_write_cmd(i2c_handle, OLED_HEIGHT - 1);
-    ssd1306_write_cmd(i2c_handle, 0xD3); // 设置显示偏移
-    ssd1306_write_cmd(i2c_handle, 0x00);
-    ssd1306_write_cmd(i2c_handle, 0x40); // 设置起始行
-    ssd1306_write_cmd(i2c_handle, 0x8D); // 电荷泵设置
-    ssd1306_write_cmd(i2c_handle, 0x14);
-    ssd1306_write_cmd(i2c_handle, 0x20); // 内存地址模式
-    ssd1306_write_cmd(i2c_handle, 0x00); // 水平模式
-    ssd1306_write_cmd(i2c_handle, 0xA1); // 段重映射
-    ssd1306_write_cmd(i2c_handle, 0xC8); // COM扫描方向
-    ssd1306_write_cmd(i2c_handle, 0xDA); // COM引脚配置
-    ssd1306_write_cmd(i2c_handle, 0x12);
-    ssd1306_write_cmd(i2c_handle, 0x81); // 对比度
-    ssd1306_write_cmd(i2c_handle, 0xCF);
-    ssd1306_write_cmd(i2c_handle, 0xD9); // 预充电周期
-    ssd1306_write_cmd(i2c_handle, 0xF1);
-    ssd1306_write_cmd(i2c_handle, 0xDB); // VCOMH 电压倍率
-    ssd1306_write_cmd(i2c_handle, 0x40);
-    ssd1306_write_cmd(i2c_handle, 0xA4); // 全局显示开启
-    ssd1306_write_cmd(i2c_handle, 0xA6); // 非反相显示
-    ssd1306_write_cmd(i2c_handle, 0xAF); // 打开显示
-
-    memset(oled_buffer, 0, sizeof(oled_buffer));
+    uint8_t buf[len + 1];
+    buf[0] = SSD1306_CTRL_CMD;
+    memcpy(buf + 1, cmd, len);
+    return i2c_master_transmit(oled_handle, buf, len + 1, pdMS_TO_TICKS(100));
 }
 
-/**
- * @brief 写入命令到 OLED
- */
-static void ssd1306_write_cmd(i2c_master_dev_handle_t i2c_handle, uint8_t cmd)
+static esp_err_t _ssd1306_write_page(const uint8_t *data128)
 {
-    i2c_cmd_handle_t cmd_handle = i2c_cmd_link_create();
-    i2c_master_start(cmd_handle);
-    i2c_master_write_byte(cmd_handle, (OLED_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd_handle, 0x00, true); // Co=0, D/C#=0
-    i2c_master_write_byte(cmd_handle, cmd, true);
-    i2c_master_stop(cmd_handle);
-    i2c_master_cmd_begin(i2c_handle, cmd_handle, pdMS_TO_TICKS(1000));
-    i2c_cmd_link_delete(cmd_handle);
+    uint8_t buf[129];
+    buf[0] = SSD1306_CTRL_DAT;
+    memcpy(buf + 1, data128, 128);
+    return i2c_master_transmit(oled_handle, buf, 129, pdMS_TO_TICKS(100));
 }
 
-/**
- * @brief 写入数据到 OLED
- */
-static void ssd1306_write_data(i2c_master_dev_handle_t i2c_handle, uint8_t data)
+/* ============================================================
+ * 基础功能
+ * ============================================================ */
+esp_err_t ssd1306_init(void)
 {
-    i2c_cmd_handle_t cmd_handle = i2c_cmd_link_create();
-    i2c_master_start(cmd_handle);
-    i2c_master_write_byte(cmd_handle, (OLED_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd_handle, 0x40, true); // Co=0, D/C#=1
-    i2c_master_write_byte(cmd_handle, data, true);
-    i2c_master_stop(cmd_handle);
-    i2c_master_cmd_begin(i2c_handle, cmd_handle, pdMS_TO_TICKS(1000));
-    i2c_cmd_link_delete(cmd_handle);
-}
-
-/**
- * @brief 刷新 OLED 显存缓存到屏幕
- */
-void ssd1306_refresh(i2c_master_dev_handle_t i2c_handle)
-{
-    for (uint8_t page = 0; page < OLED_HEIGHT / 8; page++)
+    if (g_i2c_service_installed == false)
     {
-        ssd1306_write_cmd(i2c_handle, 0xB0 + page);
-        ssd1306_write_cmd(i2c_handle, 0x00);
-        ssd1306_write_cmd(i2c_handle, 0x10);
-
-        for (uint8_t col = 0; col < OLED_WIDTH; col++)
-        {
-            ssd1306_write_data(i2c_handle, oled_buffer[OLED_WIDTH * page + col]);
-        }
+        // 初始化I2C
+        i2c_master_bus_config_t i2c_mst_config = {
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .i2c_port = I2C_MASTER_NUM,
+            .scl_io_num = I2C_MASTER_SCL_IO,
+            .sda_io_num = I2C_MASTER_SDA_IO,
+            .glitch_ignore_cnt = 7,
+            .flags.enable_internal_pullup = true,
+        };
+        ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
+        g_i2c_service_installed = true;
     }
+
+    i2c_device_config_t dev_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = OLED_I2C_ADDRESS,
+        .scl_speed_hz = I2C_MASTER_FREQ_HZ,
+    };
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &oled_handle));
+    ESP_LOGI(TAG, "oled device created");
+
+    const uint8_t init_cmds[] = {
+        0xAE, 0xD5, 0x80, 0xA8, 0x3F, 0xD3, 0x00,
+        0x40, 0x8D, 0x14, 0x20, 0x02, 0xA1, 0xC8,
+        0xDA, 0x12, 0x81, 0xCF, 0xD9, 0xF1, 0xDB,
+        0x40, 0xA4, 0xA6, 0xAF};
+
+    esp_err_t ret = _ssd1306_write_cmd(init_cmds, sizeof(init_cmds));
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ssd1306_clear(0);
+    return ssd1306_refresh();
 }
 
-/**
- * @brief 清屏
- */
-void ssd1306_clear(i2c_master_dev_handle_t i2c_handle)
+esp_err_t ssd1306_refresh(void)
 {
-    memset(oled_buffer, 0, sizeof(oled_buffer));
-    ssd1306_refresh(i2c_handle);
+    esp_err_t ret;
+    uint8_t page_buf[128];
+
+    for (uint8_t page = 0; page < 8; page++)
+    {
+        uint8_t cmd[3] = {0xB0 | page, 0x00, 0x10};
+        ret = _ssd1306_write_cmd(cmd, 3);
+        if (ret != ESP_OK)
+            return ret;
+
+        for (uint8_t col = 0; col < 128; col++)
+            page_buf[col] = ssd1306_buffer[col][page];
+
+        ret = _ssd1306_write_page(page_buf);
+        if (ret != ESP_OK)
+            return ret;
+    }
+    return ESP_OK;
 }
 
-/**
- * @brief 在缓存中设置一个点
- */
+void ssd1306_clear(uint8_t color)
+{
+    memset(ssd1306_buffer, color ? 0xFF : 0x00, sizeof(ssd1306_buffer));
+}
+
+esp_err_t ssd1306_set_contrast(uint8_t contrast)
+{
+    uint8_t cmd[2] = {0x81, contrast};
+    return _ssd1306_write_cmd(cmd, 2);
+}
+
+esp_err_t ssd1306_invert(bool invert)
+{
+    uint8_t cmd = invert ? 0xA7 : 0xA6;
+    return _ssd1306_write_cmd(&cmd, 1);
+}
+
+/* ============================================================
+ * 绘图操作
+ * ============================================================ */
 void ssd1306_draw_point(uint8_t x, uint8_t y, uint8_t color)
 {
-    if (x >= OLED_WIDTH || y >= OLED_HEIGHT) return;
-
+    if (x >= SSD1306_WIDTH || y >= SSD1306_HEIGHT)
+        return;
+    uint8_t page = y >> 3;
+    uint8_t bit = y & 0x07;
     if (color)
-        oled_buffer[x + (y / 8) * OLED_WIDTH] |= 1 << (y % 8);
+        ssd1306_buffer[x][page] |= (1 << bit);
     else
-        oled_buffer[x + (y / 8) * OLED_WIDTH] &= ~(1 << (y % 8));
+        ssd1306_buffer[x][page] &= ~(1 << bit);
 }
 
-/**
- * @brief 显示单个字符
- */
-void ssd1306_draw_char(i2c_master_dev_handle_t oled_handle, uint8_t x, uint8_t y,
-                       char chr, uint8_t size, uint8_t color)
+void ssd1306_draw_line(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint8_t color)
 {
-    // 这里调用字库函数，略，假设已有 get_font_data()
-    uint8_t i, j;
-    const uint8_t *font = get_font_data(chr, size); // 用户需实现
-    uint8_t bytes_per_char = (size / 8 + ((size % 8) ? 1 : 0)) * size;
+    int16_t dx = abs(x2 - x1);
+    int16_t dy = abs(y2 - y1);
+    int16_t sx = (x1 < x2) ? 1 : -1;
+    int16_t sy = (y1 < y2) ? 1 : -1;
+    int16_t err = dx - dy;
 
-    for (i = 0; i < size; i++)
+    while (1)
     {
-        uint8_t temp = font[i];
-        for (j = 0; j < 8; j++)
+        ssd1306_draw_point(x1, y1, color);
+        if (x1 == x2 && y1 == y2)
+            break;
+        int16_t e2 = err << 1;
+        if (e2 > -dy)
         {
-            if (temp & (1 << j))
-                ssd1306_draw_point(x + i, y + j, color);
-            else
-                ssd1306_draw_point(x + i, y + j, !color);
+            err -= dy;
+            x1 += sx;
+        }
+        if (e2 < dx)
+        {
+            err += dx;
+            y1 += sy;
+        }
+        if (x1 >= SSD1306_WIDTH || y1 >= SSD1306_HEIGHT || x1 < 0 || y1 < 0)
+            break;
+    }
+}
+
+void ssd1306_draw_rect(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color)
+{
+    ssd1306_draw_line(x1, y1, x2, y1, color);
+    ssd1306_draw_line(x1, y2, x2, y2, color);
+    ssd1306_draw_line(x1, y1, x1, y2, color);
+    ssd1306_draw_line(x2, y1, x2, y2, color);
+}
+
+void ssd1306_fill_rect(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color)
+{
+    for (uint8_t y = y1; y <= y2; y++)
+        for (uint8_t x = x1; x <= x2; x++)
+            ssd1306_draw_point(x, y, color);
+}
+
+/* ============================================================
+ * 字符显示
+ * ============================================================ */
+void ssd1306_show_char(uint8_t x, uint8_t y, char chr, uint8_t size, uint8_t color)
+{
+    if (x >= SSD1306_WIDTH || y >= SSD1306_HEIGHT)
+        return;
+    if (chr < ' ' || chr > '~')
+        return;
+
+    const uint8_t *font = NULL;
+    uint8_t width = 0, height = 0;
+
+    switch (size)
+    {
+    case 12:
+        font = c_chFont1206[chr - ' '];
+        width = 6;
+        height = 12;
+        break;
+    case 16:
+        font = c_chFont1608[chr - ' '];
+        width = 8;
+        height = 16;
+        break;
+    case 24:
+        font = c_chFont1612[chr - ' '];
+        width = 12;
+        height = 16;
+        break;
+    case 32:
+        font = c_chFont3216[chr - ' '];
+        width = 16;
+        height = 32;
+        break;
+    default:
+        return;
+    }
+
+    uint8_t pages = (height + 7) / 8;
+    for (uint8_t i = 0; i < width; i++)
+    {
+        for (uint8_t p = 0; p < pages; p++)
+        {
+            uint8_t data = font[p * width + i];
+            for (uint8_t bit = 0; bit < 8; bit++)
+            {
+                uint8_t py = y + p * 8 + bit;
+                if (py >= SSD1306_HEIGHT)
+                    break;
+                uint8_t pixel = (data & (1 << bit)) ? 1 : 0;
+                if (color)
+                    pixel = !pixel;
+                ssd1306_draw_point(x + i, py, pixel);
+            }
         }
     }
 }
 
-/**
- * @brief 显示字符串
- */
-void ssd1306_draw_string(i2c_master_dev_handle_t oled_handle, uint8_t x, uint8_t y,
-                         const uint8_t *str, uint8_t size, uint8_t color)
+void ssd1306_show_string(uint8_t x, uint8_t y, const char *str, uint8_t size, uint8_t color)
 {
+    if (!str)
+        return;
+
+    uint8_t cx = x;
+    uint8_t char_width = (size == 12) ? 6 : (size == 16) ? 8
+                                        : (size == 24)   ? 12
+                                                         : 16;
+
     while (*str)
     {
-        ssd1306_draw_char(oled_handle, x, y, *str, size, color);
-        x += size / 2;
-        str++;
+        if (cx + char_width > SSD1306_WIDTH)
+        {
+            cx = 0;
+            y += size;
+            if (y + size > SSD1306_HEIGHT)
+                break;
+        }
+        ssd1306_show_char(cx, y, *str++, size, color);
+        cx += char_width;
     }
 }
 
-/**
- * @brief 显示整数（带前导零，可显示负数）
- */
-void ssd1306_show_num(i2c_master_dev_handle_t oled_handle, uint8_t x, uint8_t y,
-                      int32_t num, uint8_t len, uint8_t size, uint8_t color)
+/* ============================================================
+ * 数字与浮点数显示
+ * ============================================================ */
+void ssd1306_show_num(uint8_t x, uint8_t y, int32_t num, uint8_t len, uint8_t size, uint8_t color)
 {
-    if (x >= OLED_WIDTH || y >= OLED_HEIGHT) return;
-    if (len == 0 || len > 10) return;
+    if (len == 0 || len > 10)
+        return;
 
-    char buf[16];
-    int neg = 0;
-    uint32_t abs_num;
+    char buf[18];
+    uint8_t offset = 0;
 
     if (num < 0)
     {
-        neg = 1;
-        abs_num = (uint32_t)(-num);
-    }
-    else
-    {
-        abs_num = (uint32_t)num;
-    }
-
-    snprintf(buf, sizeof(buf), "%0*u", len, abs_num);
-
-    if (neg)
-    {
-        for (int i = len; i >= 1; i--) buf[i] = buf[i - 1];
         buf[0] = '-';
-        buf[len + 1] = '\0';
-    }
-
-    ssd1306_draw_string(oled_handle, x, y, (const uint8_t *)buf, size, color);
-}
-
-/**
- * @brief 显示浮点数（带符号与小数位控制）
- */
-void ssd1306_show_decimal(i2c_master_dev_handle_t oled_handle, uint8_t x, uint8_t y,
-                          float num, uint8_t int_len, uint8_t dec_len,
-                          uint8_t size, uint8_t color)
-{
-    if (x >= OLED_WIDTH || y >= OLED_HEIGHT) return;
-
-    uint8_t t, temp, enshow = 0;
-    uint8_t neg_flag = 0;
-    int z_temp, f_temp;
-    uint8_t start_x = x;
-
-    if (num < 0)
-    {
-        neg_flag = 1;
+        offset = 1;
         num = -num;
     }
 
-    z_temp = (int)num;
+    char fmt[8];
+    snprintf(fmt, sizeof(fmt), "%%0%ulu", len);
+    snprintf(&buf[offset], sizeof(buf) - offset, fmt, (uint32_t)num);
 
-    for (t = 0; t < int_len; t++)
-    {
-        temp = (z_temp / oled_pow(10, int_len - t - 1)) % 10;
-        if (!enshow && t < (int_len - 1))
-        {
-            if (temp == 0)
-            {
-                ssd1306_draw_char(oled_handle, x + (size / 2) * t, y, ' ', size, color);
-                continue;
-            }
-            else
-                enshow = 1;
-        }
-        ssd1306_draw_char(oled_handle, x + (size / 2) * t, y, temp + '0', size, color);
-    }
-
-    ssd1306_draw_char(oled_handle, x + (size / 2) * int_len, y, '.', size, color);
-
-    f_temp = (int)((num - z_temp) * oled_pow(10, dec_len) + 0.5f);
-    for (t = 0; t < dec_len; t++)
-    {
-        temp = (f_temp / oled_pow(10, dec_len - t - 1)) % 10;
-        ssd1306_draw_char(oled_handle, x + (size / 2) * (int_len + 1 + t), y, temp + '0', size, color);
-    }
-
-    if (neg_flag)
-        ssd1306_draw_char(oled_handle, start_x, y, '-', size, color);
+    ssd1306_show_string(x, y, buf, size, color);
 }
 
-/* 私有函数：整数次幂 */
-static uint32_t oled_pow(uint8_t x, uint8_t y)
+void ssd1306_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_t dec_len,
+                        uint8_t size, uint8_t color)
 {
-    uint32_t result = 1;
-    for (uint8_t i = 0; i < y; i++) result *= x;
-    return result;
+    if (int_len == 0 || dec_len == 0)
+        return;
+
+    char buf[24];
+    uint8_t idx = 0;
+    bool neg = false;
+
+    if (num < 0.0f)
+    {
+        neg = true;
+        num = -num;
+    }
+
+    uint32_t int_part = (uint32_t)num;
+    uint32_t frac_part = (uint32_t)((num - int_part) * powf(10, dec_len) + 0.5f);
+
+    char int_buf[12], frac_buf[12];
+    snprintf(int_buf, sizeof(int_buf), "%0*lu", int_len, (unsigned long)int_part);
+    snprintf(frac_buf, sizeof(frac_buf), "%0*lu", dec_len, (unsigned long)frac_part);
+
+    if (neg)
+        idx += snprintf(buf + idx, sizeof(buf) - idx, "-");
+    snprintf(buf + idx, sizeof(buf) - idx, "%s.%s", int_buf, frac_buf);
+
+    ssd1306_show_string(x, y, buf, size, color);
+}
+
+/* ============================================================
+ * 图形显示
+ * ============================================================ */
+void ssd1306_draw_bitmap(uint8_t x, uint8_t y, const uint8_t *bmp,
+                         uint8_t w, uint8_t h, uint8_t color)
+{
+    if (!bmp)
+        return;
+    uint8_t blockCnt = (h + 7) / 8;
+    for (uint8_t block = 0; block < blockCnt; block++)
+    {
+        for (uint8_t col = 0; col < w; col++)
+        {
+            uint16_t idx = block * w + col;
+            uint8_t data = bmp[idx];
+            for (uint8_t bit = 0; bit < 8; bit++)
+            {
+                uint8_t py = y + block * 8 + bit;
+                if (py >= SSD1306_HEIGHT)
+                    break;
+                uint8_t pixel = (data & (1 << bit)) ? 1 : 0;
+                if (color)
+                    pixel = !pixel;
+                ssd1306_draw_point(x + col, py, pixel);
+            }
+        }
+    }
 }
