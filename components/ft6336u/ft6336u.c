@@ -22,10 +22,10 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
 }
 // 键盘矩阵
 const uint8_t g_matrix_keyboard[4][3] = {
-    {'3', '2', '1'},
-    {'6', '5', '4'},
-    {'9', '8', '7'},
-    {'#', '0', '*'}};
+    {'1', '2', '3'},
+    {'4', '5', '6'},
+    {'7', '8', '9'},
+    {'*', '0', '#'}};
 
 // I2C读取单个寄存器
 static esp_err_t i2c_read_register(uint8_t reg_addr, uint8_t *data)

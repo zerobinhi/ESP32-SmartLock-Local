@@ -6,6 +6,7 @@
 #include "web_server.h"
 #include "zw111.h"
 #include "pn532_i2c.h"
+#include "ssd1306.h"
 #include "ft6336u.h"
 #include "nvs_custom.h"
 
@@ -26,6 +27,7 @@ void app_main(void)
     ESP_LOGI(TAG, "初始化系统组件...");
 
     wifi_init_softap();
+    
     spiffs_init_and_load_webpage();
     web_server_start(); // 启动Web服务器
 
@@ -67,6 +69,16 @@ void app_main(void)
     else
     {
         ESP_LOGI(TAG, "FT6336U模块初始化成功");
+    }
+
+    // 初始化SSD1306 OLED显示屏
+    if (ssd1306_initialization() != ESP_OK)
+    {
+        ESP_LOGE(TAG, "SSD1306 OLED显示屏初始化失败");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "SSD1306 OLED显示屏初始化成功");
     }
 
     ESP_LOGI(TAG, "智能门锁系统就绪");

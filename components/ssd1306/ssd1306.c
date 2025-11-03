@@ -27,6 +27,26 @@ static uint8_t ssd1306_buffer[SSD1306_WIDTH][8];
 
 i2c_master_dev_handle_t oled_handle;
 
+/**
+ * @brief oled显示任务，包括显示当前电量、显示是否有设备连接WiFi等信息
+ * @param arg 任务参数（未使用，传入NULL）
+ * @return void
+ */
+static void oled_task(void *arg)
+{
+    static uint16_t count = 0;
+    while (1)
+    {
+        ssd1306_clear(0);
+        ssd1306_show_string(0, 0, "Smart Lock", 16, 0);
+        ssd1306_show_string(0, 16, "System Ready", 16, 0);
+        ssd1306_show_num(0, 32, count, 6, 16, 0);
+        ssd1306_refresh();
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        count++;
+    }
+}
+
 /* ============================================================
  * I2C 底层通信
  * ============================================================ */
@@ -35,7 +55,7 @@ static esp_err_t _ssd1306_write_cmd(const uint8_t *cmd, size_t len)
     uint8_t buf[len + 1];
     buf[0] = SSD1306_CTRL_CMD;
     memcpy(buf + 1, cmd, len);
-    return i2c_master_transmit(oled_handle, buf, len + 1, pdMS_TO_TICKS(100));
+    return i2c_master_transmit(oled_handle, buf, len + 1, portMAX_DELAY);
 }
 
 static esp_err_t _ssd1306_write_page(const uint8_t *data128)
@@ -43,13 +63,13 @@ static esp_err_t _ssd1306_write_page(const uint8_t *data128)
     uint8_t buf[129];
     buf[0] = SSD1306_CTRL_DAT;
     memcpy(buf + 1, data128, 128);
-    return i2c_master_transmit(oled_handle, buf, 129, pdMS_TO_TICKS(100));
+    return i2c_master_transmit(oled_handle, buf, 129, portMAX_DELAY);
 }
 
 /* ============================================================
  * 基础功能
  * ============================================================ */
-esp_err_t ssd1306_init(void)
+esp_err_t ssd1306_initialization(void)
 {
     if (g_i2c_service_installed == false)
     {
@@ -73,7 +93,11 @@ esp_err_t ssd1306_init(void)
     };
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &oled_handle));
     ESP_LOGI(TAG, "oled device created");
+    return ssd1306_init();
+}
 
+esp_err_t ssd1306_init(void)
+{
     const uint8_t init_cmds[] = {
         0xAE, 0xD5, 0x80, 0xA8, 0x3F, 0xD3, 0x00,
         0x40, 0x8D, 0x14, 0x20, 0x02, 0xA1, 0xC8,
@@ -88,6 +112,9 @@ esp_err_t ssd1306_init(void)
     }
 
     ssd1306_clear(0);
+
+    xTaskCreate(oled_task, "oled_task", 2048, NULL, 10, NULL);
+
     return ssd1306_refresh();
 }
 

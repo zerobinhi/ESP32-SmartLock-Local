@@ -17,6 +17,7 @@ extern i2c_master_dev_handle_t oled_handle;
 extern bool g_i2c_service_installed; // 是否安装了I2C服务
 extern i2c_master_bus_handle_t bus_handle;
 
+esp_err_t ssd1306_initialization(void);
 esp_err_t ssd1306_init(void);
 esp_err_t ssd1306_refresh(void);
 void ssd1306_clear(uint8_t color);
