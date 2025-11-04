@@ -32,8 +32,9 @@ static const char *TAG = "SmartLock Web Server";
 httpd_handle_t web_server_start(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;    // 增加栈大小
-    config.max_open_sockets = 5; // 增加最大连接数
+    config.stack_size = 32768;   // 增加栈大小
+    config.max_open_sockets = 7; // 增加最大连接数
+    config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     // -------------------------------
@@ -63,7 +64,7 @@ httpd_handle_t web_server_start(void)
         .method = HTTP_GET,
         .handler = favicon_handler,
         .user_ctx = NULL};
-        
+
     // -------------------------------
     // 启动服务器
     // -------------------------------
@@ -161,6 +162,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     // esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, sizeof(recv_buf));
     // 先接收帧头
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
+
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "接收帧头失败: %s", esp_err_to_name(ret));
@@ -172,6 +174,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ws_pkt.len = WS_RECV_BUFFER_SIZE - 1;
         ESP_LOGW(TAG, "数据过长，截断为%u字节", ws_pkt.len);
     }
+
     // 接收实际数据
     if (ws_pkt.len > 0)
     {

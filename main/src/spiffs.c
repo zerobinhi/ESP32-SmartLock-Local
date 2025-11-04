@@ -25,6 +25,7 @@ void spiffs_init_and_load_webpage(void)
         if (!index_html)
         {
             ESP_LOGE(TAG, "index_html 缓冲区分配失败");
+            free(index_html);
             return;
         }
     }
@@ -33,18 +34,21 @@ void spiffs_init_and_load_webpage(void)
     if (stat(INDEX_HTML_PATH, &st) != 0)
     {
         ESP_LOGE(TAG, "SPIFFS 中未找到 index.html");
+        free(index_html);
         return;
     }
     if (st.st_size >= INDEX_HTML_BUFFER_SIZE)
     {
         ESP_LOGE(TAG, "index.html 文件过大 (大小: %ld, 缓冲区: %d)",
                  st.st_size, INDEX_HTML_BUFFER_SIZE);
+        free(index_html);
         return;
     }
     FILE *fp = fopen(INDEX_HTML_PATH, "r");
     if (!fp)
     {
         ESP_LOGE(TAG, "打开 index.html 失败");
+        free(index_html);
         return;
     }
     size_t bytes_read = fread(index_html, 1, st.st_size, fp);

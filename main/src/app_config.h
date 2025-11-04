@@ -7,6 +7,9 @@
 #include <esp_err.h>
 #include <esp_log.h>
 
+#define DEFAULT_AP_SSID "ESP32-SmartLock"
+#define DEFAULT_AP_PASS "12345678"
+
 #define INDEX_HTML_BUFFER_SIZE 32768
 #define RESPONSE_DATA_BUFFER_SIZE 32768
 

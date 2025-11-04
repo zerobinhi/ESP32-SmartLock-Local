@@ -5,9 +5,6 @@ static const char *TAG = "SmartLock WiFi";
 char AP_SSID[32];
 char AP_PASS[64];
 
-/**
- * @brief WiFi事件处理器
- */
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
@@ -25,9 +22,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-/**
- * @brief 初始化WiFi为SoftAP模式
- */
 void wifi_init_softap(void)
 {
     ESP_ERROR_CHECK(esp_netif_init());
@@ -43,8 +37,19 @@ void wifi_init_softap(void)
 
     size_t ssid_len = sizeof(AP_SSID);
     size_t pass_len = sizeof(AP_PASS);
-    nvs_custom_get_str(NULL, "wifi", "wifi_ssid", AP_SSID, &ssid_len);
-    nvs_custom_get_str(NULL, "wifi", "wifi_pass", AP_PASS, &pass_len);
+
+    // 读取NVS中的WiFi配置（如果没有则使用默认值）
+    if (nvs_custom_get_str(NULL, "wifi", "wifi_ssid", AP_SSID, &ssid_len) != ESP_OK)
+    {
+        strncpy(AP_SSID, DEFAULT_AP_SSID, sizeof(AP_SSID));
+        nvs_custom_set_str(NULL, "wifi", "wifi_ssid", AP_SSID);
+    }
+
+    if (nvs_custom_get_str(NULL, "wifi", "wifi_pass", AP_PASS, &pass_len) != ESP_OK)
+    {
+        strncpy(AP_PASS, DEFAULT_AP_PASS, sizeof(AP_PASS));
+        nvs_custom_set_str(NULL, "wifi", "wifi_pass", AP_PASS);
+    }
 
     wifi_config_t wifi_config = {
         .ap = {
@@ -56,12 +61,12 @@ void wifi_init_softap(void)
     strncpy((char *)wifi_config.ap.ssid, AP_SSID, sizeof(wifi_config.ap.ssid));
     strncpy((char *)wifi_config.ap.password, AP_PASS, sizeof(wifi_config.ap.password));
     if (strlen(AP_PASS) == 0)
-    {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+
     ESP_LOGI(TAG, "WiFi AP初始化完成. SSID:%s 密码:%s 信道:%d",
              AP_SSID, AP_PASS, AP_CHANNEL);
 }
