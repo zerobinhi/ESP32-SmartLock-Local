@@ -6,7 +6,6 @@ static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t css_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
 static esp_err_t favicon_handler(httpd_req_t *req);
-static esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err);
 
 // 标志位，进行操作的时候指纹模块可能处在关机状态，也可能在验证指纹状态
 bool g_ready_add_fingerprint = false;
@@ -28,21 +27,7 @@ static int ws_client_count = 0;
 static const char *TAG = "SmartLock Web Server";
 
 /**
- * @brief 捕获所有未定义路径并重定向到主页
- */
-static esp_err_t redirect_handler(httpd_req_t *req)
-{
-    httpd_resp_set_status(req, "302 Temporary Redirect");
-    httpd_resp_set_hdr(req, "Location", "/");
-    httpd_resp_send(req,
-                    "<html><body>Redirecting to Captive Portal...</body></html>",
-                    HTTPD_RESP_USE_STRLEN);
-    ESP_LOGI("WEB", "Redirect -> %s", req->uri);
-    return ESP_OK;
-}
-
-/**
- * @brief 启动 Web 服务器（支持 Captive Portal）
+ * @brief 启动 Web 服务器
  */
 httpd_handle_t web_server_start(void)
 {
@@ -78,31 +63,7 @@ httpd_handle_t web_server_start(void)
         .method = HTTP_GET,
         .handler = favicon_handler,
         .user_ctx = NULL};
-
-    httpd_uri_t captive_test = {
-        .uri = "/generate_204",
-        .method = HTTP_GET,
-        .handler = root_handler,
-        .user_ctx = NULL};
-
-    httpd_uri_t apple_test = {
-        .uri = "/hotspot-detect.html",
-        .method = HTTP_GET,
-        .handler = root_handler,
-        .user_ctx = NULL};
-
-    httpd_uri_t msft_test = {
-        .uri = "/connecttest.txt",
-        .method = HTTP_GET,
-        .handler = root_handler,
-        .user_ctx = NULL};
         
-    httpd_uri_t redirect_uri = {
-        .uri = "/*",
-        .method = HTTP_GET,
-        .handler = redirect_handler,
-        .user_ctx = NULL};
-
     // -------------------------------
     // 启动服务器
     // -------------------------------
@@ -113,17 +74,6 @@ httpd_handle_t web_server_start(void)
         httpd_register_uri_handler(server, &css_uri);
         httpd_register_uri_handler(server, &ws_uri);
         httpd_register_uri_handler(server, &favicon_uri);
-
-        // 注册 Captive Portal 检测路径
-        httpd_register_uri_handler(server, &captive_test);
-        httpd_register_uri_handler(server, &apple_test);
-        httpd_register_uri_handler(server, &msft_test);
-
-        // 注册重定向捕获
-        httpd_register_uri_handler(server, &redirect_uri);
-
-        // 注册 404 兜底重定向
-        httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, http_404_error_handler);
 
         ESP_LOGI(TAG, "Web 服务器启动成功 (Captive Portal 已启用)");
     }
@@ -403,24 +353,6 @@ static esp_err_t favicon_handler(httpd_req_t *req)
     }
     fclose(fp);
     return httpd_resp_send_chunk(req, NULL, 0);
-}
-
-/**
- * @brief 404错误处理器 - 将所有未知请求重定向到主页
- */
-esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
-{
-    ESP_LOGI("WEB", "404 -> 重定向到主页: %s", req->uri);
-
-    // 设置HTTP 302状态码
-    httpd_resp_set_status(req, "302 Temporary Redirect");
-    // 设置重定向目标
-    httpd_resp_set_hdr(req, "Location", "/");
-    // iOS需要返回一些内容，否则不会弹出门户页面
-    const char *body = "<html><body>Redirecting to Captive Portal...</body></html>";
-    httpd_resp_send(req, body, HTTPD_RESP_USE_STRLEN);
-
-    return ESP_OK;
 }
 
 /**

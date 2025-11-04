@@ -14,9 +14,7 @@
 
 #define AP_CHANNEL 6
 #define MAX_STA_CONN 5
-#define DNS_PORT 53
 
 void wifi_init_softap(void);
-void dns_server_task(void *pv);
 
 #endif
