@@ -42,7 +42,7 @@ static void oled_task(void *arg)
         ssd1306_show_string(0, 16, "System Ready", 16, 0);
         ssd1306_show_num(0, 32, count, 6, 16, 0);
         ssd1306_refresh();
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
         count++;
     }
 }

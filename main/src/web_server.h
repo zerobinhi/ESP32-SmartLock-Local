@@ -5,6 +5,7 @@
 #include <esp_http_server.h>
 #include "app_config.h"
 #include <cJSON.h>
+#include "errno.h"
 #include "zw111.h"
 #include "nvs_custom.h"
 

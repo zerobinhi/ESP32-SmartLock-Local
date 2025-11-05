@@ -7,12 +7,10 @@
 #include "app_config.h"
 #include <esp_mac.h>
 #include "nvs_custom.h"
-#include "lwip/inet.h"
-#include "lwip/sockets.h"
 
 #define AP_CHANNEL 6
 #define MAX_STA_CONN 5
 
 void wifi_init_softap(void);
 
-#endif
+#endif // WIFI_H
