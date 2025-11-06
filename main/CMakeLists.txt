@@ -4,6 +4,7 @@ idf_component_register(
         "src/spiffs.c"
         "src/web_server.c"
         "src/wifi.c"
+        "src/dns_server.c"
         INCLUDE_DIRS
         "."
         "src"

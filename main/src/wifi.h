@@ -7,6 +7,7 @@
 #include "app_config.h"
 #include <esp_mac.h>
 #include "nvs_custom.h"
+#include "dns_server.h"
 
 #define AP_CHANNEL 6
 #define MAX_STA_CONN 5

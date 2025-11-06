@@ -26,6 +26,15 @@ static int ws_client_count = 0;
 
 static const char *TAG = "SmartLock Web Server";
 
+esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
+{
+    httpd_resp_set_status(req, "302 Temporary Redirect");
+    httpd_resp_set_hdr(req, "Location", "/");
+    httpd_resp_send(req, "Redirect to captive portal", HTTPD_RESP_USE_STRLEN);
+    ESP_LOGI("CAPTIVE_PORTAL", "HTTP redirect to root");
+    return ESP_OK;
+}
+
 /**
  * @brief 启动 Web 服务器
  */
@@ -33,6 +42,7 @@ httpd_handle_t web_server_start(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 32768; // 增加栈大小
+    config.max_open_sockets = 13;
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
@@ -73,6 +83,7 @@ httpd_handle_t web_server_start(void)
         return NULL;
     }
 
+    httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, http_404_error_handler); // 注册404重定向
     httpd_register_uri_handler(server, &index_uri);
     httpd_register_uri_handler(server, &css_uri);
     httpd_register_uri_handler(server, &ws_uri);
@@ -100,6 +111,8 @@ static esp_err_t root_handler(httpd_req_t *req)
         ESP_LOGE(TAG, "设置内容类型失败");
         return httpd_resp_send_500(req);
     }
+    
+    httpd_resp_set_hdr(req, "Connection", "close"); // 防止 Keep-Alive 问题
 
     res = httpd_resp_send(req, index_html, HTTPD_RESP_USE_STRLEN);
     if (res != ESP_OK)

@@ -26,9 +26,8 @@ void app_main(void)
     // 初始化系统组件
     ESP_LOGI(TAG, "初始化系统组件...");
 
-    wifi_init_softap();
-    
     spiffs_init_and_load_webpage();
+    wifi_init_softap();
     web_server_start(); // 启动Web服务器
 
     // 初始化蜂鸣器模块
