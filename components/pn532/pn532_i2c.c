@@ -81,8 +81,9 @@ esp_err_t pn532_initialization()
     gpio_isr_handler_add(PN532_INT_PIN, gpio_isr_handler, (void *)PN532_INT_PIN);
 
     gpio_set_level(PN532_RST_PIN, 0);
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(100));
     gpio_set_level(PN532_RST_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     ESP_LOGI(TAG, "pn532 interrupt gpio configured");
 
@@ -139,9 +140,9 @@ esp_err_t pn532_send_command_and_receive(const uint8_t *cmd, size_t cmd_len, uin
     }
     if (cmd != NULL && cmd_len > 0)
     {
-        i2c_master_transmit(pn532_handle, cmd, cmd_len, -1);
+        i2c_master_transmit(pn532_handle, cmd, cmd_len, portMAX_DELAY);
         vTaskDelay(pdMS_TO_TICKS(30)); // 延迟等待模块处理
-        i2c_master_receive(pn532_handle, response, response_len, -1);
+        i2c_master_receive(pn532_handle, response, response_len, portMAX_DELAY);
     }
     else
     {
@@ -238,13 +239,13 @@ void pn532_task(void *arg)
                     {
                         ESP_LOGI(TAG, "Unknown card: 0x%llX", card_id_value);
                         uint8_t message = 0x00;
-                        xQueueSend(card_queue, &message, portMAX_DELAY);
+                        // xQueueSend(card_queue, &message, portMAX_DELAY);
                     }
                     else // 卡在库中
                     {
                         ESP_LOGI(TAG, "Recognized card: 0x%llX", card_id_value);
                         uint8_t message = 0x01;
-                        xQueueSend(card_queue, &message, portMAX_DELAY);
+                        // xQueueSend(card_queue, &message, portMAX_DELAY);
                     }
                 }
 

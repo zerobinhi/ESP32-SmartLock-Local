@@ -50,20 +50,40 @@ static void oled_task(void *arg)
 /* ============================================================
  * I2C 底层通信
  * ============================================================ */
-static esp_err_t _ssd1306_write_cmd(const uint8_t *cmd, size_t len)
+static esp_err_t _ssd1306_write_cmd(uint8_t *cmd, size_t len)
 {
-    uint8_t buf[len + 1];
-    buf[0] = SSD1306_CTRL_CMD;
-    memcpy(buf + 1, cmd, len);
-    return i2c_master_transmit(oled_handle, buf, len + 1, portMAX_DELAY);
+    uint8_t ctrl = SSD1306_CTRL_CMD;
+
+    i2c_master_transmit_multi_buffer_info_t buffers[2] = {
+        {.write_buffer = &ctrl, .buffer_size = 1},
+        {.write_buffer = cmd, .buffer_size = len},
+    };
+
+    esp_err_t err = i2c_master_multi_buffer_transmit(oled_handle, buffers, 2, portMAX_DELAY);
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Write cmd failed: %s", esp_err_to_name(err));
+    }
+    return err;
 }
 
-static esp_err_t _ssd1306_write_page(const uint8_t *data128)
+static esp_err_t _ssd1306_write_page(uint8_t *data128)
 {
-    uint8_t buf[129];
-    buf[0] = SSD1306_CTRL_DAT;
-    memcpy(buf + 1, data128, 128);
-    return i2c_master_transmit(oled_handle, buf, 129, portMAX_DELAY);
+    uint8_t ctrl = SSD1306_CTRL_DAT;
+
+    i2c_master_transmit_multi_buffer_info_t buffers[2] = {
+        {.write_buffer = &ctrl, .buffer_size = 1},
+        {.write_buffer = data128, .buffer_size = 128},
+    };
+
+    esp_err_t err = i2c_master_multi_buffer_transmit(oled_handle, buffers, 2, portMAX_DELAY);
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Write page failed: %s", esp_err_to_name(err));
+    }
+    return err;
 }
 
 /* ============================================================
@@ -98,7 +118,7 @@ esp_err_t ssd1306_initialization(void)
 
 esp_err_t ssd1306_init(void)
 {
-    const uint8_t init_cmds[] = {
+    uint8_t init_cmds[] = {
         0xAE, 0xD5, 0x80, 0xA8, 0x3F, 0xD3, 0x00,
         0x40, 0x8D, 0x14, 0x20, 0x02, 0xA1, 0xC8,
         0xDA, 0x12, 0x81, 0xCF, 0xD9, 0xF1, 0xDB,

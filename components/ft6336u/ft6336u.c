@@ -175,8 +175,6 @@ void touch_task(void *arg)
                             xQueueSend(password_queue, &message, portMAX_DELAY);
                         }
                         memset(g_input_password, 0, sizeof(g_input_password));
-
-                        
                     }
                 }
                 else
@@ -261,8 +259,9 @@ esp_err_t ft6336u_initialization()
     gpio_isr_handler_add(FT6336U_INT_PIN, gpio_isr_handler, (void *)FT6336U_INT_PIN);
 
     gpio_set_level(FT6336U_RST_PIN, 0);
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(100));
     gpio_set_level(FT6336U_RST_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     ESP_LOGI(TAG, "ft6336u interrupt gpio configured");
 

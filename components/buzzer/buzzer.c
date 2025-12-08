@@ -126,10 +126,7 @@ void password_send_buzzer_message(void *pvParameters)
     while (1)
     {
         // 修复：从密码专属队列接收消息
-        BaseType_t xRecvRet = xQueueReceive(
-            password_queue,
-            &message,
-            portMAX_DELAY);
+        BaseType_t xRecvRet = xQueueReceive(password_queue, &message, portMAX_DELAY);
 
         if (xRecvRet == pdTRUE)
         {
@@ -168,10 +165,7 @@ void card_send_buzzer_message(void *pvParameters)
     while (1)
     {
         // 修复：从刷卡专属队列接收消息
-        BaseType_t xRecvRet = xQueueReceive(
-            card_queue,
-            &message,
-            portMAX_DELAY);
+        BaseType_t xRecvRet = xQueueReceive(card_queue, &message, portMAX_DELAY);
 
         if (xRecvRet == pdTRUE)
         {
@@ -210,10 +204,7 @@ void app_send_buzzer_message(void *pvParameters)
     while (1)
     {
         // 从APP专属队列接收消息（如远程开锁指令）
-        BaseType_t xRecvRet = xQueueReceive(
-            app_queue,
-            &message,
-            portMAX_DELAY);
+        BaseType_t xRecvRet = xQueueReceive(app_queue, &message, portMAX_DELAY);
 
         if (xRecvRet == pdTRUE)
         {
@@ -252,23 +243,20 @@ void buzzer_task(void *pvParameters)
     while (1)
     {
         // 从蜂鸣器队列接收信号（统一处理所有模块的触发）
-        BaseType_t xRecvRet = xQueueReceive(
-            buzzer_queue,
-            &message,
-            portMAX_DELAY);
+        BaseType_t xRecvRet = xQueueReceive(buzzer_queue, &message, portMAX_DELAY);
 
         if (xRecvRet == pdTRUE)
         {
             ESP_LOGI(TAG, "Buzzer received message: %u (1=success, 0=failure)", message);
             if (message == 1)
-            {                                      // 开门成功：长鸣1秒+开锁
-                //gpio_set_level(BUZZER_CTL_PIN, 0); // 打开蜂鸣器（低电平响）
-                gpio_set_level(LOCK_CTL_PIN, 1);   // 电磁锁通电开锁
+            { // 开门成功：长鸣1秒+开锁
+                // gpio_set_level(BUZZER_CTL_PIN, 0); // 打开蜂鸣器（低电平响）
+                gpio_set_level(LOCK_CTL_PIN, 1); // 电磁锁通电开锁
                 ESP_LOGI(TAG, "Buzzer beeping (success) + Lock unlocked");
 
-                vTaskDelay(pdMS_TO_TICKS(1000));   // 保持开锁1秒
-                //gpio_set_level(BUZZER_CTL_PIN, 1); // 关闭蜂鸣器
-                gpio_set_level(LOCK_CTL_PIN, 0);   // 电磁锁断电关锁
+                vTaskDelay(pdMS_TO_TICKS(1000)); // 保持开锁1秒
+                // gpio_set_level(BUZZER_CTL_PIN, 1); // 关闭蜂鸣器
+                gpio_set_level(LOCK_CTL_PIN, 0); // 电磁锁断电关锁
                 ESP_LOGI(TAG, "Buzzer stopped + Lock locked");
             }
             else if (message == 0)
@@ -276,14 +264,14 @@ void buzzer_task(void *pvParameters)
                 // 开门失败：短鸣2次（200ms响+100ms停）
                 ESP_LOGI(TAG, "Buzzer beeping (failure)");
                 // 第一次鸣叫
-                //gpio_set_level(BUZZER_CTL_PIN, 0);
+                // gpio_set_level(BUZZER_CTL_PIN, 0);
                 vTaskDelay(pdMS_TO_TICKS(200));
-                //gpio_set_level(BUZZER_CTL_PIN, 1);
+                // gpio_set_level(BUZZER_CTL_PIN, 1);
                 vTaskDelay(pdMS_TO_TICKS(100));
                 // 第二次鸣叫
-                //gpio_set_level(BUZZER_CTL_PIN, 0);
+                // gpio_set_level(BUZZER_CTL_PIN, 0);
                 vTaskDelay(pdMS_TO_TICKS(200));
-                //gpio_set_level(BUZZER_CTL_PIN, 1);
+                // gpio_set_level(BUZZER_CTL_PIN, 1);
                 ESP_LOGI(TAG, "Buzzer stopped (failure)");
             }
         }
