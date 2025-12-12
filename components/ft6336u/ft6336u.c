@@ -15,10 +15,10 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
     uint32_t gpio_num = (uint32_t)arg;
     // ESP_EARLY_LOGI(TAG, "ft6336u模块中断触发, gpio_num=%u", gpio_num);
-    if (gpio_num == FT6336U_INT_PIN && gpio_get_level(FT6336U_INT_PIN) == 0)
-    {
-        xSemaphoreGiveFromISR(touch_semaphore, NULL);
-    }
+    // if (gpio_num == FT6336U_INT_PIN && gpio_get_level(FT6336U_INT_PIN) == 0)
+    // {
+    //     xSemaphoreGiveFromISR(touch_semaphore, NULL);
+    // }
 }
 // 键盘矩阵
 const uint8_t g_matrix_keyboard[4][3] = {
@@ -235,33 +235,33 @@ esp_err_t ft6336u_initialization()
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &touch_handle));
     ESP_LOGI(TAG, "ft6336u device created");
 
-    gpio_config_t ft6336u_reset_gpio_config = {
-        .pin_bit_mask = (1ULL << FT6336U_RST_PIN),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE};
-    gpio_config(&ft6336u_reset_gpio_config);
+    // gpio_config_t ft6336u_reset_gpio_config = {
+    //     .pin_bit_mask = (1ULL << FT6336U_RST_PIN),
+    //     .mode = GPIO_MODE_OUTPUT,
+    //     .pull_up_en = GPIO_PULLUP_DISABLE,
+    //     .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    //     .intr_type = GPIO_INTR_DISABLE};
+    // gpio_config(&ft6336u_reset_gpio_config);
 
-    gpio_config_t ft6336u_int_gpio_config = {
-        .pin_bit_mask = (1ULL << FT6336U_INT_PIN),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_NEGEDGE};
-    gpio_config(&ft6336u_int_gpio_config);
+    // gpio_config_t ft6336u_int_gpio_config = {
+    //     .pin_bit_mask = (1ULL << FT6336U_INT_PIN),
+    //     .mode = GPIO_MODE_INPUT,
+    //     .pull_up_en = GPIO_PULLUP_ENABLE,
+    //     .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    //     .intr_type = GPIO_INTR_NEGEDGE};
+    // gpio_config(&ft6336u_int_gpio_config);
 
     if (g_gpio_isr_service_installed == false)
     {
         gpio_install_isr_service(0);
         g_gpio_isr_service_installed = true;
     }
-    gpio_isr_handler_add(FT6336U_INT_PIN, gpio_isr_handler, (void *)FT6336U_INT_PIN);
+    // gpio_isr_handler_add(FT6336U_INT_PIN, gpio_isr_handler, (void *)FT6336U_INT_PIN);
 
-    gpio_set_level(FT6336U_RST_PIN, 0);
-    vTaskDelay(pdMS_TO_TICKS(100));
-    gpio_set_level(FT6336U_RST_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(100));
+    // gpio_set_level(FT6336U_RST_PIN, 0);
+    // vTaskDelay(pdMS_TO_TICKS(100));
+    // gpio_set_level(FT6336U_RST_PIN, 1);
+    // vTaskDelay(pdMS_TO_TICKS(100));
 
     ESP_LOGI(TAG, "ft6336u interrupt gpio configured");
 

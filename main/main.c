@@ -26,29 +26,29 @@ void app_main(void)
     // 初始化系统组件
     ESP_LOGI(TAG, "初始化系统组件...");
 
-    // spiffs_init_and_load_webpage();
-    // wifi_init_softap();
-    // web_server_start(); // 启动Web服务器
+    spiffs_init_and_load_webpage();
+    wifi_init_softap();
+    web_server_start(); // 启动Web服务器
 
     // // 初始化蜂鸣器模块
-    // if (smart_lock_buzzer_init() != ESP_OK)
-    // {
-    //     ESP_LOGE(TAG, "蜂鸣器模块初始化失败");
-    // }
-    // else
-    // {
-    //     ESP_LOGI(TAG, "蜂鸣器模块初始化成功");
-    // }
+    if (smart_lock_buzzer_init() != ESP_OK)
+    {
+        ESP_LOGE(TAG, "蜂鸣器模块初始化失败");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "蜂鸣器模块初始化成功");
+    }
 
     // // 初始化指纹模块
-    // if (fingerprint_initialization() != ESP_OK)
-    // {
-    //     ESP_LOGE(TAG, "指纹模块初始化失败");
-    // }
-    // else
-    // {
-    //     ESP_LOGI(TAG, "指纹模块初始化成功");
-    // }
+    if (fingerprint_initialization() != ESP_OK)
+    {
+        ESP_LOGE(TAG, "指纹模块初始化失败");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "指纹模块初始化成功");
+    }
 
     // 初始化PN532模块
     if (pn532_initialization() != ESP_OK)
@@ -89,6 +89,7 @@ void app_main(void)
     {
         ESP_LOGI(TAG, "SSD1306 OLED显示屏初始化成功");
     }
+    printf("Function: %s, File: %s, Line: %d\n", __func__, __FILE__, __LINE__);
 
     ESP_LOGI(TAG, "智能门锁系统就绪");
 }
