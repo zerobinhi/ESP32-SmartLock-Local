@@ -22,15 +22,15 @@
 				<div class="card-title">设备信息</div>
 				<div class="status-item">
 					<label>指纹数量</label>
-					<span class="value" id="home-fingerprint-count"></span>
+					<span class="value" id="home-fingerprint-count">-</span>
 				</div>
 				<div class="status-item">
 					<label>卡号数量</label>
-					<span class="value" id="home-card-count"></span>
+					<span class="value" id="home-card-count">-</span>
 				</div>
 				<div class="status-item">
 					<label>固件版本</label>
-					<span class="value" id="firmware-version"></span>
+					<span class="value" id="firmware-version">-</span>
 				</div>
 			</div>
 		</div>
@@ -45,11 +45,14 @@
 			</div>
 			<div class="btn-group">
 				<button class="btn btn-add" id="add-card">
-					<i>+</i>添加卡片 </button>
+					<i>+</i>添加卡片
+				</button>
 				<button class="btn btn-empty" id="empty-card">
-					<i>✕</i>清空卡片 </button>
+					<i>✕</i>清空卡片
+				</button>
 				<button class="btn btn-refresh" id="refresh-cards">
-					<i>↺</i>刷新 </button>
+					<i>↺</i>刷新
+				</button>
 			</div>
 			<div class="card">
 				<div class="list-container" id="card-list-container">
@@ -71,11 +74,14 @@
 			</div>
 			<div class="btn-group">
 				<button class="btn btn-add" id="add-fingerprint">
-					<i>+</i>录入指纹 </button>
+					<i>+</i>录入指纹
+				</button>
 				<button class="btn btn-empty" id="empty-fingerprint">
-					<i>✕</i>清空指纹 </button>
+					<i>✕</i>清空指纹
+				</button>
 				<button class="btn btn-refresh" id="refresh-fingerprints">
-					<i>↺</i>刷新 </button>
+					<i>↺</i>刷新
+				</button>
 			</div>
 			<div class="card">
 				<div class="list-container" id="fingerprint-list-container">
@@ -86,6 +92,7 @@
 				</div>
 			</div>
 		</div>
+		<!-- 我的页面 -->
 		<div id="mine-page" class="page-container">
 			<div class="card">
 				<div class="card-title">系统设置</div>
@@ -276,7 +283,7 @@
 		}
 
 		function updateVersion(version) {
-			document.getElementById('firmware-version').textContent = `v${version}`;	
+			document.getElementById('firmware-version').textContent = `v${version}`;
 		}
 
 		function updateCardData(newCards) {
