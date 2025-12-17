@@ -25,7 +25,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
     uint32_t gpio_num = (uint32_t)arg;
     if (gpio_num == PN532_INT_PIN && gpio_get_level(PN532_INT_PIN) == 0)
     {
-        // ESP_EARLY_LOGI(TAG, "pn532模块中断触发, gpio_num=%u", gpio_num);
+        ESP_EARLY_LOGI(TAG, "pn532模块中断触发, gpio_num=%u", gpio_num);
         xSemaphoreGiveFromISR(pn532_semaphore, NULL);
     }
 }

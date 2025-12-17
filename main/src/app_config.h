@@ -27,16 +27,13 @@
 #define PN532_I2C_ADDRESS ((uint8_t)0x24)
 #define OLED_I2C_ADDRESS ((uint8_t)0x3C)
 
-// #define FT6336U_RST_PIN 19 /*!< GPIO for FT6336U reset */
-// #define FT6336U_INT_PIN 21 /*!< GPIO for FT6336U interrupt */
-
 #define LOCK_CTL_PIN 35
 #define BUZZER_CTL_PIN 20
 
-#define FINGERPRINT_LED_PIN 19
-#define PASSWORD_LED_PIN 37
-#define CARD_LED_PIN 38
-#define APP_LED_PIN 39
+#define FINGERPRINT_LED_PIN 38
+#define PASSWORD_LED_PIN 39
+#define CARD_LED_PIN 37
+#define APP_LED_PIN 19
 
 #define BATTERY_PIN 1
 
