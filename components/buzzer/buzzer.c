@@ -6,7 +6,7 @@ QueueHandle_t password_queue;    // 密码模块→蜂鸣器的消息队列
 QueueHandle_t app_queue;         // 远程APP→蜂鸣器的消息队列
 QueueHandle_t card_queue;        // 刷卡模块→蜂鸣器的消息队列
 
-static const char *TAG = "SmartLock Buzzer";
+static const char *TAG = "buzzer";
 
 esp_err_t gpio_initialization(void)
 {

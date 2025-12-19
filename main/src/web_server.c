@@ -24,7 +24,7 @@ httpd_handle_t server = NULL;
 static int ws_clients[MAX_WS_CLIENTS] = {0};
 static int ws_client_count = 0;
 
-static const char *TAG = "SmartLock Web Server";
+static const char *TAG = "web_server";
 
 esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
 {
@@ -297,7 +297,26 @@ static esp_err_t ws_handler(httpd_req_t *req)
         strncpy(g_delete_card_number, recv_buf + strlen(prefix), sizeof(g_delete_card_number) - 1);
         g_delete_card_number[sizeof(g_delete_card_number) - 1] = '\0';
         ESP_LOGI(TAG, "处理删除指定卡片命令，卡号: %s", g_delete_card_number);
-        g_ready_delete_card = true;
+
+        g_ready_delete_card = true; //todo
+        // for (uint8_t i = 0; i < g_card_count; i++)
+        // {
+        //     if (strcmp(g_delete_card_number, g_card_id_value[i]) == 0)
+        //     {
+        //         // 找到匹配项，删除卡片
+        //         for (uint8_t j = i; j < g_card_count - 1; j++)
+        //         {
+        //             g_card_id_value[j] = g_card_id_value[j + 1];
+        //             strcpy(g_card_id_value[j], g_card_id_value[j + 1]);
+        //         }
+        //         g_card_count--;
+        //         nvs_custom_set_u8(NULL, "card", "count", g_card_count);
+        //         send_operation_result("card_deleted", true); // 发送操作结果
+        //         ESP_LOGI(TAG, "卡片 %s 删除成功", g_delete_card_number);
+        //         break;
+        //     }
+        // }
+        
     }
     else if (strcmp(recv_buf, "add_fingerprint") == 0)
     {

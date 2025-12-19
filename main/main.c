@@ -10,7 +10,7 @@
 #include "touch.h"
 #include "nvs_custom.h"
 
-static const char *TAG = "SmartLock Main";
+static const char *TAG = "main";
 
 void app_main(void)
 {
@@ -66,14 +66,14 @@ void app_main(void)
         ESP_LOGI(TAG, "PN532模块初始化成功");
     }
 
-    // 初始化触摸引脚
-    if (app_touch_initialization() != ESP_OK)
+    // 初始化电容触摸按键
+    if (touch_initialization() != ESP_OK)
     {
-        ESP_LOGE(TAG, "触摸引脚初始化失败");
+        ESP_LOGE(TAG, "电容触摸按键初始化失败");
     }
     else
     {
-        ESP_LOGI(TAG, "触摸引脚初始化成功");
+        ESP_LOGI(TAG, "电容触摸按键初始化成功");
     }
 
     spiffs_init_and_load_webpage();

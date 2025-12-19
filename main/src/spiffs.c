@@ -1,6 +1,6 @@
 #include "spiffs.h"
 
-static const char *TAG = "SmartLock SPIFFS";
+static const char *TAG = "spiffs";
 
 /**
  * @brief 初始化SPIFFS并加载index.html到内存

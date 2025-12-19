@@ -1,9 +1,9 @@
 #include "wifi.h"
 
-static const char *TAG = "SmartLock WiFi";
+static const char *TAG = "wifi";
 
-char AP_SSID[32] = {0};
-char AP_PASS[64] = {0};
+char g_ap_ssid[32] = {0};
+char g_ap_pass[64] = {0};
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
@@ -31,42 +31,38 @@ void wifi_init_softap(void)
 
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
 
-    size_t ssid_len = sizeof(AP_SSID);
-    size_t pass_len = sizeof(AP_PASS);
+    size_t ssid_len = sizeof(g_ap_ssid);
+    size_t pass_len = sizeof(g_ap_pass);
 
     // 读取NVS中的WiFi配置（如果没有则使用默认值）
-    if (nvs_custom_get_str(NULL, "wifi", "wifi_ssid", AP_SSID, &ssid_len) != ESP_OK)
+    if (nvs_custom_get_str(NULL, "wifi", "wifi_ssid", g_ap_ssid, &ssid_len) != ESP_OK)
     {
-        strncpy(AP_SSID, DEFAULT_AP_SSID, sizeof(AP_SSID));
-        nvs_custom_set_str(NULL, "wifi", "wifi_ssid", AP_SSID);
+        strncpy(g_ap_ssid, DEFAULT_AP_SSID, sizeof(g_ap_ssid));
+        nvs_custom_set_str(NULL, "wifi", "wifi_ssid", g_ap_ssid);
     }
 
-    if (nvs_custom_get_str(NULL, "wifi", "wifi_pass", AP_PASS, &pass_len) != ESP_OK)
+    if (nvs_custom_get_str(NULL, "wifi", "wifi_pass", g_ap_pass, &pass_len) != ESP_OK)
     {
-        strncpy(AP_PASS, DEFAULT_AP_PASS, sizeof(AP_PASS));
-        nvs_custom_set_str(NULL, "wifi", "wifi_pass", AP_PASS);
+        strncpy(g_ap_pass, DEFAULT_AP_PASS, sizeof(g_ap_pass));
+        nvs_custom_set_str(NULL, "wifi", "wifi_pass", g_ap_pass);
     }
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid_len = strlen(AP_SSID),
+            .ssid_len = strlen(g_ap_ssid),
             .channel = AP_CHANNEL,
             .max_connection = MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK,
         }};
 
-    strncpy((char *)wifi_config.ap.ssid, AP_SSID, sizeof(wifi_config.ap.ssid));
-    strncpy((char *)wifi_config.ap.password, AP_PASS, sizeof(wifi_config.ap.password));
-    if (strlen(AP_PASS) == 0)
-    {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN; // 如果没有密码则开放
-    }
+    strncpy((char *)wifi_config.ap.ssid, g_ap_ssid, sizeof(wifi_config.ap.ssid));
+    strncpy((char *)wifi_config.ap.password, g_ap_pass, sizeof(wifi_config.ap.password));
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "WiFi AP初始化完成. SSID:%s 密码:%s 信道:%d", AP_SSID, AP_PASS, AP_CHANNEL);
+    ESP_LOGI(TAG, "WiFi AP初始化完成. SSID:%s 密码:%s 信道:%d", g_ap_ssid, g_ap_pass, AP_CHANNEL);
 
     // get the IP of the access point to redirect to
     esp_netif_ip_info_t ip_info;

@@ -3,13 +3,10 @@
 static const char *TAG = "nvs_custom";
 
 // -------------------------- 初始化/反初始化 --------------------------
-/**
- * @brief 初始化默认NVS分区（复用原生nvs_flash_init）
- */
 esp_err_t nvs_custom_init(void)
 {
     esp_err_t ret = nvs_flash_init();
-    // 处理分区版本不匹配或无空闲页的情况（原生逻辑）
+    // 处理分区版本不匹配或无空闲页的情况
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
         ESP_LOGW(TAG, "NVS partition need erase, try to erase...");
@@ -32,9 +29,6 @@ esp_err_t nvs_custom_init(void)
     return ret;
 }
 
-/**
- * @brief 反初始化默认NVS分区（复用原生nvs_flash_deinit）
- */
 esp_err_t nvs_custom_deinit(void)
 {
     esp_err_t ret = nvs_flash_deinit();
@@ -51,23 +45,23 @@ esp_err_t nvs_custom_deinit(void)
 
 // -------------------------- 通用辅助函数：打开/关闭命名空间 --------------------------
 /**
- * @brief 辅助函数：打开NVS命名空间（内部使用，封装原生nvs_open_from_partition）
- * @param part_name 分区名（NULL则用默认）
+ * @brief 辅助函数：打开NVS命名空间
+ * @param part_name 分区名
  * @param ns_name 命名空间名
- * @param open_mode 打开模式（NVS_READONLY/NVS_READWRITE）
+ * @param open_mode 打开模式
  * @param out_handle 输出handle
  * @return esp_err_t 错误码
  */
 static esp_err_t __nvs_custom_open(const char *part_name, const char *ns_name,
                                    nvs_open_mode_t open_mode, nvs_handle_t *out_handle)
 {
-    // 参数合法性检查（避免原生接口崩溃）
+    // 参数合法性检查
     if (ns_name == NULL || out_handle == NULL)
     {
         ESP_LOGE(TAG, "Invalid param: ns_name or out_handle is NULL");
         return ESP_ERR_INVALID_ARG;
     }
-    // 若分区名为NULL，使用原生默认分区（NVS_DEFAULT_PART_NAME）
+    // 若分区名为NULL，使用原生默认分区
     const char *actual_part = (part_name == NULL) ? NVS_DEFAULT_PART_NAME : part_name;
     // 调用原生接口打开命名空间
     esp_err_t ret = nvs_open_from_partition(actual_part, ns_name, open_mode, out_handle);
@@ -80,7 +74,7 @@ static esp_err_t __nvs_custom_open(const char *part_name, const char *ns_name,
 }
 
 /**
- * @brief 辅助函数：关闭NVS命名空间（内部使用，封装原生nvs_close）
+ * @brief 辅助函数：关闭NVS命名空间
  * @param handle 要关闭的handle
  */
 static void __nvs_custom_close(nvs_handle_t handle)
@@ -101,7 +95,7 @@ esp_err_t nvs_custom_set_u8(const char *part_name, const char *ns_name, const ch
         return ESP_ERR_INVALID_ARG;
     }
     nvs_handle_t handle;
-    // 打开命名空间（读写模式）
+    // 打开命名空间
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
     if (ret != ESP_OK)
     {
@@ -111,7 +105,7 @@ esp_err_t nvs_custom_set_u8(const char *part_name, const char *ns_name, const ch
     ret = nvs_set_u8(handle, key, value);
     if (ret == ESP_OK)
     {
-        // 提交写入（原生set操作需commit才会同步到Flash）
+        // 提交写入
         ret = nvs_commit(handle);
         if (ret == ESP_OK)
         {
@@ -126,7 +120,7 @@ esp_err_t nvs_custom_set_u8(const char *part_name, const char *ns_name, const ch
     {
         ESP_LOGE(TAG, "Set u8 failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
     }
-    // 无论成功与否，必须关闭handle（避免资源泄漏）
+    // 无论成功与否，必须关闭handle
     __nvs_custom_close(handle);
     return ret;
 }
@@ -139,7 +133,7 @@ esp_err_t nvs_custom_get_u8(const char *part_name, const char *ns_name, const ch
         return ESP_ERR_INVALID_ARG;
     }
     nvs_handle_t handle;
-    // 打开命名空间（只读模式，更安全）
+    // 打开命名空间
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
     if (ret != ESP_OK)
     {
@@ -555,7 +549,7 @@ esp_err_t nvs_custom_get_str(const char *part_name, const char *ns_name, const c
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
     if (ret != ESP_OK)
         return ret;
-    // 调用原生接口读取字符串（需传入缓冲区和长度指针）
+    // 调用原生接口读取字符串
     ret = nvs_get_str(handle, key, out_buf, buf_len);
     if (ret == ESP_OK)
     {
@@ -643,7 +637,7 @@ esp_err_t nvs_custom_get_blob(const char *part_name, const char *ns_name, const 
     return ret;
 }
 
-// -------------------------- 删除操作封装 --------------------------
+// -------------------------- 系统操作封装 --------------------------
 esp_err_t nvs_custom_erase_key(const char *part_name, const char *ns_name, const char *key)
 {
     if (key == NULL)
@@ -694,5 +688,74 @@ esp_err_t nvs_custom_erase_all(const char *part_name, const char *ns_name)
         ESP_LOGE(TAG, "Erase all failed [ns: %s]: 0x%x", ns_name, ret);
     }
     __nvs_custom_close(handle);
+    return ret;
+}
+esp_err_t nvs_custom_erase_partition(const char *part_name)
+{
+    // 若分区名为NULL，使用原生默认分区
+    const char *actual_part = (part_name == NULL) ? NVS_DEFAULT_PART_NAME : part_name;
+    // 调用原生接口擦除整个分区
+    esp_err_t ret = nvs_flash_erase_partition(actual_part);
+    if (ret == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Erase partition success [part: %s]", actual_part);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Erase partition failed [part: %s]: 0x%x", actual_part, ret);
+    }
+    return ret;
+}
+bool nvs_custom_key_exists(const char *part_name, const char *ns_name, const char *key)
+{
+    if (key == NULL)
+    {
+        ESP_LOGE(TAG, "Invalid param: key is NULL");
+        return false;
+    }
+    nvs_handle_t handle;
+    esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
+    if (ret != ESP_OK)
+    {
+        return false;
+    }
+    // 尝试读取键以检查其是否存在
+    ret = nvs_find_key(handle, key, NULL); // 使用NULL作为类型参数以仅检查存在性
+    __nvs_custom_close(handle);
+    if (ret == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Key exists [ns: %s, key: %s]", ns_name, key);
+        return true;
+    }
+    else if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        ESP_LOGI(TAG, "Key does not exist [ns: %s, key: %s]", ns_name, key);
+        return false;
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Error checking key existence [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
+        return false;
+    }
+}
+esp_err_t nvs_custom_get_stats(const char *part_name, nvs_stats_t *out_stats)
+{
+    if (out_stats == NULL)
+    {
+        ESP_LOGE(TAG, "Invalid param: out_stats is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+    // 若分区名为NULL，使用原生默认分区
+    const char *actual_part = (part_name == NULL) ? NVS_DEFAULT_PART_NAME : part_name;
+    // 调用原生接口获取统计信息
+    esp_err_t ret = nvs_get_stats(actual_part, out_stats);
+    if (ret == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Get stats success [part: %s]", actual_part);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Get stats failed [part: %s]: 0x%x", actual_part, ret);
+    }
     return ret;
 }

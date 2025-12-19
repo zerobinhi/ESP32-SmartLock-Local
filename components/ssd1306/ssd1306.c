@@ -16,7 +16,7 @@
 #include <string.h>
 #include <math.h>
 
-#define TAG "SSD1306"
+#define TAG "ssd1306"
 
 /* SSD1306 控制字节（I2C） */
 #define SSD1306_CTRL_CMD 0x00
@@ -35,6 +35,7 @@ i2c_master_dev_handle_t oled_handle;
 static void oled_task(void *arg)
 {
     static uint16_t count = 0;
+    
     while (1)
     {
         ssd1306_clear(0);

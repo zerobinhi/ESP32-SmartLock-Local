@@ -10,10 +10,9 @@ bool g_i2c_service_installed = false;      // 是否安装了I2C服务
 
 uint64_t g_card_id_value[MAX_CARDS] = {0};                                                        // 卡号的数值形式
 uint8_t g_card_count = 0;                                                                         // 卡的数量
-uint8_t g_card_uid[8] = {0};                                                                      // 卡号
 uint8_t g_cmd_detect_card[] = {0x00, 0x00, 0xff, 0x04, 0xfc, 0xd4, 0x4a, 0x02, 0x00, 0xe0, 0x00}; // 读取卡片命令
 
-static const char *TAG = "SmartLock PN532";
+static const char *TAG = "pn532";
 
 /**
  * @brief 触摸中断服务程序
@@ -105,18 +104,23 @@ esp_err_t pn532_initialization()
     gpio_config(&pn532_int_gpio_config);
 
     // 读取存在nvs的卡片信息
-    nvs_custom_get_u8(NULL, "card", "count", &g_card_count);
-
-    // 读取所有卡片ID
-    size_t size = sizeof(g_card_id_value); // 读取前告诉 NVS 缓冲区大小
-    nvs_custom_get_blob(NULL, "card", "card_ids", g_card_id_value, &size);
-
-    // 打印卡片数量
-    ESP_LOGI(TAG, "Total cards loaded: %d", g_card_count);
-    // 打印所有卡片ID
-    for (uint8_t i = 0; i < g_card_count; i++)
+    esp_err_t err = nvs_custom_get_u8(NULL, "card", "count", &g_card_count);
+    if (err != ESP_OK)
     {
-        ESP_LOGI(TAG, "Card %d ID (uint64): 0x%llX", i + 1, g_card_id_value[i]);
+        ESP_LOGE(TAG, "Failed to get card count from NVS");
+        g_card_count = 0; // 如果读取失败，默认卡片数量为0
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Card count loaded from NVS: %d", g_card_count);
+        // 读取所有卡片ID
+        size_t size = sizeof(g_card_id_value); // 读取前告诉 NVS 缓冲区大小
+        nvs_custom_get_blob(NULL, "card", "card_ids", g_card_id_value, &size);
+        // 打印所有卡片ID
+        for (uint8_t i = 0; i < g_card_count; i++)
+        {
+            ESP_LOGI(TAG, "Card %d ID (uint64): 0x%llX", i + 1, g_card_id_value[i]);
+        }
     }
 
     // 创建任务
@@ -183,6 +187,7 @@ uint8_t find_card_id(uint64_t card_id)
 void pn532_task(void *arg)
 {
     uint8_t res[19] = {0};
+    uint8_t g_card_uid[8] = {0};
     while (1)
     {
         if (xSemaphoreTake(pn532_semaphore, portMAX_DELAY) == pdTRUE)
@@ -196,10 +201,6 @@ void pn532_task(void *arg)
                     ESP_LOGE(TAG, "卡号长度不合法: %hhu", card_id_len);
                     return; // 跳过无效卡号
                 }
-
-                memcpy(g_card_uid, &res[14], card_id_len); // 复制卡号
-
-                ESP_LOG_BUFFER_HEX("g_card_uid", g_card_uid, card_id_len); // 打印卡号
 
                 // ssd1306_draw_string(oled_handle, 0, 16, g_card_uid, 16, 1);
                 // ssd1306_refresh_gram(oled_handle);
