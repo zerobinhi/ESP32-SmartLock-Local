@@ -39,6 +39,9 @@
 
 #define MAX_CARDS 20
 
+#define TOUCH_PASSWORD_LEN 6 
+#define DEFAULT_PASSWORD "123456"
+
 #define true 1
 #define false 0
 

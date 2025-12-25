@@ -8,6 +8,7 @@
 #include "pn532_i2c.h"
 #include "ssd1306.h"
 #include "touch.h"
+#include "battery.h"
 #include "nvs_custom.h"
 
 static const char *TAG = "main";
@@ -34,6 +35,16 @@ void app_main(void)
     else
     {
         ESP_LOGI(TAG, "SSD1306 OLED显示屏初始化成功");
+    }
+
+    // 初始化电池监测
+    if (battery_init() != ESP_OK)
+    {
+        ESP_LOGE(TAG, "电池监测初始化失败");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "电池监测初始化成功");
     }
 
     // 初始化蜂鸣器模块
@@ -76,11 +87,11 @@ void app_main(void)
         ESP_LOGI(TAG, "电容触摸按键初始化成功");
     }
 
-    spiffs_init_and_load_webpage();
-    wifi_init_softap();
-    web_server_start(); // 启动Web服务器
-    
-    printf("Function: %s, File: %s, Line: %d\n", __func__, __FILE__, __LINE__);
+    // spiffs_init_and_load_webpage();
+    // wifi_init_softap();
+    // web_server_start(); // 启动Web服务器
+
+    ESP_LOGI(TAG, "Function: %s, File: %s, Line: %d\n", __func__, __FILE__, __LINE__);
 
     ESP_LOGI(TAG, "智能门锁系统就绪");
 }

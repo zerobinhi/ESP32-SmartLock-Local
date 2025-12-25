@@ -18,10 +18,6 @@
 
 #define TAG "ssd1306"
 
-/* SSD1306 控制字节（I2C） */
-#define SSD1306_CTRL_CMD 0x00
-#define SSD1306_CTRL_DAT 0x40
-
 /* 显存缓存（128x64 -> 128x8页） */
 static uint8_t ssd1306_buffer[SSD1306_WIDTH][8];
 
@@ -35,11 +31,16 @@ i2c_master_dev_handle_t oled_handle;
 static void oled_task(void *arg)
 {
     static uint16_t count = 0;
-    
+    ssd1306_clear(0);
+    ssd1306_draw_bitmap(0, 2, &c_chSingal816[0], 16, 8, 0);
+    ssd1306_draw_bitmap(24, 2, &c_chBluetooth88[0], 8, 8, 0);
+    ssd1306_draw_bitmap(40, 2, &c_chMsg816[0], 16, 8, 0);
+    ssd1306_draw_bitmap(64, 2, &c_chGPRS88[0], 8, 8, 0);
+    ssd1306_draw_bitmap(90, 2, &c_chAlarm88[0], 8, 8, 0);
+    ssd1306_refresh();
+
     while (1)
     {
-        ssd1306_clear(0);
-        ssd1306_show_string(0, 0, "Smart Lock", 16, 0);
         ssd1306_show_string(0, 16, "System Ready", 16, 0);
         ssd1306_show_num(0, 32, count, 6, 16, 0);
         ssd1306_refresh();

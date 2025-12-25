@@ -9,15 +9,15 @@
 #include <sys/param.h>
 #include <inttypes.h>
 
-#include "esp_log.h"
-#include "esp_system.h"
-#include "esp_check.h"
-#include "esp_netif.h"
+#include <esp_log.h>
+#include <esp_system.h>
+#include <esp_check.h>
+#include <esp_netif.h>
 
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
-#include "lwip/netdb.h"
+#include <lwip/err.h>
+#include <lwip/sockets.h>
+#include <lwip/sys.h>
+#include <lwip/netdb.h>
 
 #define DNS_SERVER_MAX_ITEMS 1
 

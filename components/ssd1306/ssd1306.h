@@ -7,9 +7,13 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
-#include <esp_log.h>
 #include "app_config.h"
 
+// SSD1306 控制字节
+#define SSD1306_CTRL_CMD 0x00
+#define SSD1306_CTRL_DAT 0x40
+
+// OLED 分辨率
 #define SSD1306_WIDTH 128
 #define SSD1306_HEIGHT 64
 

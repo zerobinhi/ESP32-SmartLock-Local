@@ -21,8 +21,8 @@ static const uint8_t touch_channels[] = {
     TOUCH_MIN_CHAN_ID + 3, // 6
 
     TOUCH_MIN_CHAN_ID + 5,  // 7
-    TOUCH_MIN_CHAN_ID + 2,  // 8
-    TOUCH_MIN_CHAN_ID + 10, // 9
+    TOUCH_MIN_CHAN_ID + 10, // 8
+    TOUCH_MIN_CHAN_ID + 13, // 9
 
     TOUCH_MIN_CHAN_ID + 4,  // *
     TOUCH_MIN_CHAN_ID + 11, // 0
@@ -201,14 +201,11 @@ esp_err_t touch_initialization(void)
     touch_channel_handle_t ch[sizeof(touch_keys)];
 
     // 控制器创建
-    touch_sensor_sample_config_t sample_cfg[1] =
-        {TOUCH_SENSOR_V2_DEFAULT_SAMPLE_CONFIG(500, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V2)};
+    touch_sensor_sample_config_t sample_cfg[1] = {TOUCH_SENSOR_V2_DEFAULT_SAMPLE_CONFIG(500, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V2)};
 
-    touch_sensor_config_t sens_cfg =
-        TOUCH_SENSOR_DEFAULT_BASIC_CONFIG(1, sample_cfg);
+    touch_sensor_config_t sens_cfg = TOUCH_SENSOR_DEFAULT_BASIC_CONFIG(1, sample_cfg);
 
-    ESP_RETURN_ON_ERROR(touch_sensor_new_controller(&sens_cfg, &sens), TAG,
-                        "Create controller failed");
+    ESP_ERROR_CHECK(touch_sensor_new_controller(&sens_cfg, &sens));
 
     // 创建通道
     for (int i = 0; i < sizeof(touch_keys); i++)
@@ -220,15 +217,12 @@ esp_err_t touch_initialization(void)
             .init_charge_volt = TOUCH_INIT_CHARGE_VOLT_DEFAULT,
         };
 
-        ESP_RETURN_ON_ERROR(
-            touch_sensor_new_channel(sens, touch_channels[i], &cfg, &ch[i]),
-            TAG, "Create channel failed");
+        ESP_ERROR_CHECK(touch_sensor_new_channel(sens, touch_channels[i], &cfg, &ch[i]));
 
         touch_chan_info_t info;
         touch_sensor_get_channel_info(ch[i], &info);
 
-        ESP_LOGI(TAG, "Key '%c': CH %d -> GPIO%d",
-                 touch_keys[i], touch_channels[i], info.chan_gpio);
+        ESP_LOGI(TAG, "Key '%c': CH %d -> GPIO%d", touch_keys[i], touch_channels[i], info.chan_gpio);
     }
 
     // 滤波器设置

@@ -15,4 +15,5 @@ void fingerprint_send_buzzer_message(void *pvParameters);
 void password_send_buzzer_message(void *pvParameters);
 void card_send_buzzer_message(void *pvParameters);
 esp_err_t smart_lock_buzzer_init(void);
+
 #endif

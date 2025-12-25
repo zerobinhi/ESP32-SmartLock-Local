@@ -6,7 +6,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
-#include <esp_log.h>
 #include "nvs_custom.h"
 #include "app_config.h"
 
