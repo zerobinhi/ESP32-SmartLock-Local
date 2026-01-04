@@ -3,14 +3,15 @@
 static const char *TAG = "touch";
 
 // =======================================================================
-// 12 键布局 (四行三列)
+// 12-key layout (4 rows x 3 columns)
+//
 //    1   2   3
 //    4   5   6
 //    7   8   9
 //    *   0   #
 // =======================================================================
 
-// 你的硬件通道映射（可按实际 PCB 修改）
+// Hardware channel mapping (adjust according to actual PCB routing)
 static const uint8_t touch_channels[] = {
     TOUCH_MIN_CHAN_ID + 7, // 1
     TOUCH_MIN_CHAN_ID + 9, // 2
@@ -29,7 +30,7 @@ static const uint8_t touch_channels[] = {
     TOUCH_MIN_CHAN_ID + 12, // #
 };
 
-// 键值字符（顺序必须与上面通道一致）
+// Key characters (order must match touch_channels[])
 static const char touch_keys[] = {
     '1',
     '2',
@@ -45,13 +46,13 @@ static const char touch_keys[] = {
     '#',
 };
 
-QueueHandle_t touch_key_queue = NULL; // 触摸按键事件队列
+QueueHandle_t touch_key_queue = NULL; // Touch key event queue
 
-char g_touch_password[TOUCH_PASSWORD_LEN + 1]; // 存储的密码
-char g_input_password[TOUCH_PASSWORD_LEN + 1]; // 当前输入
+char g_touch_password[TOUCH_PASSWORD_LEN + 1]; // Stored password
+char g_input_password[TOUCH_PASSWORD_LEN + 1]; // Current input buffer
 uint8_t g_input_len = 0;
 
-// 根据通道号查找键值
+// Map touch channel ID to corresponding key character
 static char touch_key_from_channel(uint8_t ch)
 {
     for (int i = 0; i < sizeof(touch_keys); i++)
@@ -64,11 +65,14 @@ static char touch_key_from_channel(uint8_t ch)
     return 0;
 }
 
+// Touch active callback (ISR context)
 static bool on_touch_active(touch_sensor_handle_t sens, const touch_active_event_data_t *event, void *arg)
 {
     char key = touch_key_from_channel(event->chan_id);
     if (!key)
+    {
         return false;
+    }
 
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xQueueSendFromISR(touch_key_queue, &key, &xHigherPriorityTaskWoken);
@@ -76,24 +80,27 @@ static bool on_touch_active(touch_sensor_handle_t sens, const touch_active_event
     return xHigherPriorityTaskWoken == pdTRUE;
 }
 
+// Touch inactive callback (unused)
 static bool on_touch_inactive(touch_sensor_handle_t sens, const touch_inactive_event_data_t *event, void *arg)
 {
     return false;
 }
 
-// 初始标定：扫描基线，计算动态阈值
+// Initial calibration: scan baseline and calculate dynamic thresholds
 static void do_initial_scanning(touch_sensor_handle_t sens, touch_channel_handle_t *handles)
 {
     touch_sensor_enable(sens);
 
+    // Perform several one-shot scans to stabilize baseline
     for (int i = 0; i < 3; i++)
+    {
         touch_sensor_trigger_oneshot_scanning(sens, 2000);
+    }
 
     touch_sensor_disable(sens);
 
     for (int i = 0; i < sizeof(touch_keys); i++)
     {
-
         uint32_t bm[1] = {};
         touch_channel_config_t cfg = {
             .active_thresh = {0},
@@ -109,15 +116,13 @@ static void do_initial_scanning(touch_sensor_handle_t sens, touch_channel_handle
 
         cfg.active_thresh[0] = (uint32_t)(bm[0] * TOUCH_THRESH2BM_RATIO);
 
-        ESP_LOGI(TAG,
-                 "CH %d BM:%" PRIu32 " TH:%" PRIu32,
-                 touch_channels[i], bm[0], cfg.active_thresh[0]);
+        ESP_LOGI(TAG, "Channel %d baseline=%" PRIu32 ", threshold=%" PRIu32, touch_channels[i], bm[0], cfg.active_thresh[0]);
 
         touch_sensor_reconfig_channel(handles[i], &cfg);
     }
 }
 
-// 触摸按键任务
+// Touch key processing task
 static void touch_key_task(void *arg)
 {
     char key;
@@ -126,7 +131,7 @@ static void touch_key_task(void *arg)
     {
         if (xQueueReceive(touch_key_queue, &key, portMAX_DELAY))
         {
-            ESP_LOGI(TAG, "Key: %c", key);
+            ESP_LOGI(TAG, "Key pressed: %c", key);
 
             if (key >= '0' && key <= '9')
             {
@@ -138,27 +143,34 @@ static void touch_key_task(void *arg)
             }
             else if (key == '*')
             {
+                // Clear input
                 g_input_len = 0;
                 memset(g_input_password, 0, sizeof(g_input_password));
             }
             else if (key == '#')
             {
+                // Confirm password
                 if (g_input_len == TOUCH_PASSWORD_LEN)
                 {
                     if (strcmp(g_input_password, g_touch_password) == 0)
                     {
-                        ESP_LOGI(TAG, "Password OK");
+                        ESP_LOGI(TAG, "Password verification OK");
+                        uint8_t message = 0x01; // Success
+                        xQueueSend(password_queue, &message, portMAX_DELAY);
                     }
                     else
                     {
-                        ESP_LOGW(TAG, "Password ERROR");
+                        ESP_LOGW(TAG, "Password verification FAILED");
+                        uint8_t message = 0x00; // Failure
+                        xQueueSend(password_queue, &message, portMAX_DELAY);
                     }
                 }
                 else
                 {
-                    ESP_LOGW(TAG, "Password length error (%d)", g_input_len);
+                    ESP_LOGW(TAG, "Invalid password length: %d", g_input_len);
                 }
 
+                // Reset input state
                 g_input_len = 0;
                 memset(g_input_password, 0, sizeof(g_input_password));
             }
@@ -166,7 +178,7 @@ static void touch_key_task(void *arg)
     }
 }
 
-// 读取或初始化密码
+// Load password from NVS or initialize default
 static void touch_password_init(void)
 {
     size_t len = sizeof(g_touch_password);
@@ -175,19 +187,20 @@ static void touch_password_init(void)
 
     if (err == ESP_ERR_NVS_NOT_FOUND)
     {
-        ESP_LOGW(TAG, "Password not found, set default");
+        ESP_LOGW(TAG, "Password not found, using default");
         strcpy(g_touch_password, DEFAULT_PASSWORD);
 
         nvs_custom_set_str(NULL, "NVS_TOUCH", "touch_password", g_touch_password);
     }
     else
     {
-        ESP_LOGI(TAG, "Password loaded: %s", g_touch_password);
+        ESP_LOGI(TAG, "Password loaded from NVS");
     }
+
     xTaskCreate(touch_key_task, "touch_key_task", 4096, NULL, 10, NULL);
 }
 
-// 初始化入口
+// Touch driver initialization entry
 esp_err_t touch_initialization(void)
 {
     touch_key_queue = xQueueCreate(8, sizeof(char));
@@ -200,17 +213,18 @@ esp_err_t touch_initialization(void)
     touch_sensor_handle_t sens = NULL;
     touch_channel_handle_t ch[sizeof(touch_keys)];
 
-    // 控制器创建
-    touch_sensor_sample_config_t sample_cfg[1] = {TOUCH_SENSOR_V2_DEFAULT_SAMPLE_CONFIG(500, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V2)};
+    // Create touch controller
+    touch_sensor_sample_config_t sample_cfg[1] = {
+        TOUCH_SENSOR_V2_DEFAULT_SAMPLE_CONFIG(500, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V2)};
 
-    touch_sensor_config_t sens_cfg = TOUCH_SENSOR_DEFAULT_BASIC_CONFIG(1, sample_cfg);
+    touch_sensor_config_t sens_cfg =
+        TOUCH_SENSOR_DEFAULT_BASIC_CONFIG(1, sample_cfg);
 
     ESP_ERROR_CHECK(touch_sensor_new_controller(&sens_cfg, &sens));
 
-    // 创建通道
+    // Create touch channels
     for (int i = 0; i < sizeof(touch_keys); i++)
     {
-
         touch_channel_config_t cfg = {
             .active_thresh = {2000},
             .charge_speed = TOUCH_CHARGE_SPEED_7,
@@ -222,28 +236,29 @@ esp_err_t touch_initialization(void)
         touch_chan_info_t info;
         touch_sensor_get_channel_info(ch[i], &info);
 
-        ESP_LOGI(TAG, "Key '%c': CH %d -> GPIO%d", touch_keys[i], touch_channels[i], info.chan_gpio);
+        ESP_LOGI(TAG, "Key '%c': channel %d mapped to GPIO%d", touch_keys[i], touch_channels[i], info.chan_gpio);
     }
 
-    // 滤波器设置
-    touch_sensor_filter_config_t filter = TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
+    // Configure digital filter
+    touch_sensor_filter_config_t filter =
+        TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
     touch_sensor_config_filter(sens, &filter);
 
-    // 初始扫描
+    // Perform initial baseline scanning
     do_initial_scanning(sens, ch);
 
-    // 注册回调
+    // Register touch callbacks
     touch_event_callbacks_t cb = {
         .on_active = on_touch_active,
         .on_inactive = on_touch_inactive,
     };
     touch_sensor_register_callbacks(sens, &cb, NULL);
 
-    // 启动扫描
+    // Start continuous scanning
     touch_sensor_enable(sens);
     touch_sensor_start_continuous_scanning(sens);
 
-    ESP_LOGI(TAG, "Touch driver initialized with 12 keys.");
+    ESP_LOGI(TAG, "Touch driver initialized (12 keys)");
 
     touch_password_init();
 

@@ -8,10 +8,8 @@
 #include "app_config.h"
 
 #define TOUCH_THRESH2BM_RATIO 0.3f
+extern QueueHandle_t password_queue;
 
-/**
- * @brief 初始化触摸按键驱动（12键）
- */
 esp_err_t touch_initialization(void);
 
 #endif // __TOUCH_DRIVER_H_

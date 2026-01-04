@@ -36,9 +36,7 @@ void ssd1306_fill_rect(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t c
 void ssd1306_show_char(uint8_t x, uint8_t y, char chr, uint8_t size, uint8_t color);
 void ssd1306_show_string(uint8_t x, uint8_t y, const char *str, uint8_t size, uint8_t color);
 void ssd1306_show_num(uint8_t x, uint8_t y, int32_t num, uint8_t len, uint8_t size, uint8_t color);
-void ssd1306_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_t dec_len,
-                        uint8_t size, uint8_t color);
-void ssd1306_draw_bitmap(uint8_t x, uint8_t y, const uint8_t *bmp,
-                         uint8_t w, uint8_t h, uint8_t color);
+void ssd1306_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_t dec_len, uint8_t size, uint8_t color);
+void ssd1306_draw_bitmap(uint8_t x, uint8_t y, const uint8_t *bmp, uint8_t w, uint8_t h, uint8_t color);
 
 #endif /* SSD1306_H_ */

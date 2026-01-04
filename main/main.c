@@ -15,76 +15,72 @@ static const char *TAG = "main";
 
 void app_main(void)
 {
-    // 初始化NVS
+    // initialize NVS
     if (nvs_custom_init() != ESP_OK)
     {
-        ESP_LOGE(TAG, "NVS 初始化失败");
+        ESP_LOGE(TAG, "NVS initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "NVS 初始化成功");
+        ESP_LOGI(TAG, "NVS initialization successful");
     }
-    // 初始化系统组件
-    ESP_LOGI(TAG, "初始化系统组件...");
+    // initialize system components
+    ESP_LOGI(TAG, "Initializing system components...");
 
-    // 初始化SSD1306 OLED显示屏
+    // initializing OLED display
     if (ssd1306_initialization() != ESP_OK)
     {
-        ESP_LOGE(TAG, "SSD1306 OLED显示屏初始化失败");
+        ESP_LOGE(TAG, "OLED display initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "SSD1306 OLED显示屏初始化成功");
+        ESP_LOGI(TAG, "SSD1306 OLED display initialization successful");
     }
 
-    // 初始化电池监测
+    // initializing battery monitoring
     if (battery_init() != ESP_OK)
     {
-        ESP_LOGE(TAG, "电池监测初始化失败");
+        ESP_LOGE(TAG, "battery monitoring initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "电池监测初始化成功");
+        ESP_LOGI(TAG, "battery monitoring initialization successful");
     }
 
-    // 初始化蜂鸣器模块
     if (smart_lock_buzzer_init() != ESP_OK)
     {
-        ESP_LOGE(TAG, "蜂鸣器模块初始化失败");
+        ESP_LOGE(TAG, "buzzer module initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "蜂鸣器模块初始化成功");
+        ESP_LOGI(TAG, "buzzer module initialization successful");
     }
 
-    // 初始化指纹模块
     if (fingerprint_initialization() != ESP_OK)
     {
-        ESP_LOGE(TAG, "指纹模块初始化失败");
+        ESP_LOGE(TAG, "fingerprint module initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "指纹模块初始化成功");
+        ESP_LOGI(TAG, "fingerprint module initialization successful");
     }
 
-    // 初始化PN532模块
     if (pn532_initialization() != ESP_OK)
     {
-        ESP_LOGE(TAG, "PN532模块初始化失败");
+        ESP_LOGE(TAG, "PN532 module initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "PN532模块初始化成功");
+        ESP_LOGI(TAG, "PN532 module initialization successful");
     }
 
-    // 初始化电容触摸按键
     if (touch_initialization() != ESP_OK)
     {
-        ESP_LOGE(TAG, "电容触摸按键初始化失败");
+        ESP_LOGE(TAG, "capacitive touch button initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "电容触摸按键初始化成功");
+        ESP_LOGI(TAG, "capacitive touch button initialization successful");
     }
 
     // spiffs_init_and_load_webpage();
@@ -93,5 +89,5 @@ void app_main(void)
 
     ESP_LOGI(TAG, "Function: %s, File: %s, Line: %d\n", __func__, __FILE__, __LINE__);
 
-    ESP_LOGI(TAG, "智能门锁系统就绪");
+    ESP_LOGI(TAG, "smart lock system initialization complete.");
 }

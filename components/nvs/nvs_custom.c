@@ -2,21 +2,19 @@
 
 static const char *TAG = "nvs_custom";
 
-// -------------------------- 初始化/反初始化 --------------------------
 esp_err_t nvs_custom_init(void)
 {
     esp_err_t ret = nvs_flash_init();
-    // 处理分区版本不匹配或无空闲页的情况
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
         ESP_LOGW(TAG, "NVS partition need erase, try to erase...");
-        ret = nvs_flash_erase(); // 擦除分区
+        ret = nvs_flash_erase();
         if (ret != ESP_OK)
         {
             ESP_LOGE(TAG, "Erase NVS partition failed: 0x%x", ret);
             return ret;
         }
-        ret = nvs_flash_init(); // 重新初始化
+        ret = nvs_flash_init();
     }
     if (ret == ESP_OK)
     {
@@ -55,15 +53,12 @@ esp_err_t nvs_custom_deinit(void)
 static esp_err_t __nvs_custom_open(const char *part_name, const char *ns_name,
                                    nvs_open_mode_t open_mode, nvs_handle_t *out_handle)
 {
-    // 参数合法性检查
     if (ns_name == NULL || out_handle == NULL)
     {
         ESP_LOGE(TAG, "Invalid param: ns_name or out_handle is NULL");
         return ESP_ERR_INVALID_ARG;
     }
-    // 若分区名为NULL，使用原生默认分区
     const char *actual_part = (part_name == NULL) ? NVS_DEFAULT_PART_NAME : part_name;
-    // 调用原生接口打开命名空间
     esp_err_t ret = nvs_open_from_partition(actual_part, ns_name, open_mode, out_handle);
     if (ret != ESP_OK)
     {
@@ -80,13 +75,12 @@ static esp_err_t __nvs_custom_open(const char *part_name, const char *ns_name,
 static void __nvs_custom_close(nvs_handle_t handle)
 {
     if (handle != 0)
-    { // 原生handle非0表示有效
+    { 
         nvs_close(handle);
         ESP_LOGD(TAG, "Close NVS handle: %d", handle);
     }
 }
 
-// -------------------------- 无符号整数类型封装 --------------------------
 esp_err_t nvs_custom_set_u8(const char *part_name, const char *ns_name, const char *key, uint8_t value)
 {
     if (key == NULL)
@@ -95,17 +89,14 @@ esp_err_t nvs_custom_set_u8(const char *part_name, const char *ns_name, const ch
         return ESP_ERR_INVALID_ARG;
     }
     nvs_handle_t handle;
-    // 打开命名空间
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
     if (ret != ESP_OK)
     {
         return ret;
     }
-    // 调用原生接口写入uint8_t
     ret = nvs_set_u8(handle, key, value);
     if (ret == ESP_OK)
     {
-        // 提交写入
         ret = nvs_commit(handle);
         if (ret == ESP_OK)
         {
@@ -120,7 +111,6 @@ esp_err_t nvs_custom_set_u8(const char *part_name, const char *ns_name, const ch
     {
         ESP_LOGE(TAG, "Set u8 failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
     }
-    // 无论成功与否，必须关闭handle
     __nvs_custom_close(handle);
     return ret;
 }
@@ -133,13 +123,11 @@ esp_err_t nvs_custom_get_u8(const char *part_name, const char *ns_name, const ch
         return ESP_ERR_INVALID_ARG;
     }
     nvs_handle_t handle;
-    // 打开命名空间
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
     if (ret != ESP_OK)
     {
         return ret;
     }
-    // 调用原生接口读取uint8_t
     ret = nvs_get_u8(handle, key, out_value);
     if (ret == ESP_OK)
     {
@@ -153,7 +141,6 @@ esp_err_t nvs_custom_get_u8(const char *part_name, const char *ns_name, const ch
     {
         ESP_LOGE(TAG, "Get u8 failed [ns: %s, key: %s]: 0x%x", ns_name, key, ret);
     }
-    // 关闭handle
     __nvs_custom_close(handle);
     return ret;
 }
@@ -508,7 +495,6 @@ esp_err_t nvs_custom_get_i64(const char *part_name, const char *ns_name, const c
     return ret;
 }
 
-// -------------------------- 字符串类型封装 --------------------------
 esp_err_t nvs_custom_set_str(const char *part_name, const char *ns_name, const char *key, const char *value)
 {
     if (key == NULL || value == NULL)
@@ -520,7 +506,6 @@ esp_err_t nvs_custom_set_str(const char *part_name, const char *ns_name, const c
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
     if (ret != ESP_OK)
         return ret;
-    // 调用原生接口写入字符串
     ret = nvs_set_str(handle, key, value);
     if (ret == ESP_OK)
     {
@@ -549,7 +534,6 @@ esp_err_t nvs_custom_get_str(const char *part_name, const char *ns_name, const c
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
     if (ret != ESP_OK)
         return ret;
-    // 调用原生接口读取字符串
     ret = nvs_get_str(handle, key, out_buf, buf_len);
     if (ret == ESP_OK)
     {
@@ -562,8 +546,7 @@ esp_err_t nvs_custom_get_str(const char *part_name, const char *ns_name, const c
     }
     else if (ret == ESP_ERR_NVS_INVALID_LENGTH)
     {
-        ESP_LOGE(TAG, "Get str failed: buffer too small [need: %zu, current: %zu]",
-                 *buf_len, *buf_len); // 原生会将需要的长度写入buf_len
+        ESP_LOGE(TAG, "Get str failed: buffer too small [need: %zu, current: %zu]", *buf_len, *buf_len);
     }
     else
     {
@@ -573,7 +556,6 @@ esp_err_t nvs_custom_get_str(const char *part_name, const char *ns_name, const c
     return ret;
 }
 
-// -------------------------- 数组类型封装 --------------------------
 esp_err_t nvs_custom_set_blob(const char *part_name, const char *ns_name, const char *key, const void *value, size_t value_size)
 {
     if (key == NULL || value == NULL || value_size == 0)
@@ -585,7 +567,6 @@ esp_err_t nvs_custom_set_blob(const char *part_name, const char *ns_name, const 
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
     if (ret != ESP_OK)
         return ret;
-    // 调用原生接口写入blob
     ret = nvs_set_blob(handle, key, value, value_size);
     if (ret == ESP_OK)
     {
@@ -614,7 +595,6 @@ esp_err_t nvs_custom_get_blob(const char *part_name, const char *ns_name, const 
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READONLY, &handle);
     if (ret != ESP_OK)
         return ret;
-    // 调用原生接口读取blob
     ret = nvs_get_blob(handle, key, out_buf, buf_size);
     if (ret == ESP_OK)
     {
@@ -626,8 +606,7 @@ esp_err_t nvs_custom_get_blob(const char *part_name, const char *ns_name, const 
     }
     else if (ret == ESP_ERR_NVS_INVALID_LENGTH)
     {
-        ESP_LOGE(TAG, "Get blob failed: buffer too small [need: %zu, current: %zu]",
-                 *buf_size, *buf_size); // 原生会将需要的长度写入buf_size
+        ESP_LOGE(TAG, "Get blob failed: buffer too small [need: %zu, current: %zu]", *buf_size, *buf_size);
     }
     else
     {
@@ -649,7 +628,6 @@ esp_err_t nvs_custom_erase_key(const char *part_name, const char *ns_name, const
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
     if (ret != ESP_OK)
         return ret;
-    // 调用原生接口删除指定键
     ret = nvs_erase_key(handle, key);
     if (ret == ESP_OK)
     {
@@ -673,7 +651,6 @@ esp_err_t nvs_custom_erase_all(const char *part_name, const char *ns_name)
     esp_err_t ret = __nvs_custom_open(part_name, ns_name, NVS_READWRITE, &handle);
     if (ret != ESP_OK)
         return ret;
-    // 调用原生接口删除命名空间所有键
     ret = nvs_erase_all(handle);
     if (ret == ESP_OK)
     {
@@ -692,9 +669,7 @@ esp_err_t nvs_custom_erase_all(const char *part_name, const char *ns_name)
 }
 esp_err_t nvs_custom_erase_partition(const char *part_name)
 {
-    // 若分区名为NULL，使用原生默认分区
     const char *actual_part = (part_name == NULL) ? NVS_DEFAULT_PART_NAME : part_name;
-    // 调用原生接口擦除整个分区
     esp_err_t ret = nvs_flash_erase_partition(actual_part);
     if (ret == ESP_OK)
     {
@@ -719,8 +694,7 @@ bool nvs_custom_key_exists(const char *part_name, const char *ns_name, const cha
     {
         return false;
     }
-    // 尝试读取键以检查其是否存在
-    ret = nvs_find_key(handle, key, NULL); // 使用NULL作为类型参数以仅检查存在性
+    ret = nvs_find_key(handle, key, NULL);
     __nvs_custom_close(handle);
     if (ret == ESP_OK)
     {
@@ -745,9 +719,7 @@ esp_err_t nvs_custom_get_stats(const char *part_name, nvs_stats_t *out_stats)
         ESP_LOGE(TAG, "Invalid param: out_stats is NULL");
         return ESP_ERR_INVALID_ARG;
     }
-    // 若分区名为NULL，使用原生默认分区
     const char *actual_part = (part_name == NULL) ? NVS_DEFAULT_PART_NAME : part_name;
-    // 调用原生接口获取统计信息
     esp_err_t ret = nvs_get_stats(actual_part, out_stats);
     if (ret == ESP_OK)
     {

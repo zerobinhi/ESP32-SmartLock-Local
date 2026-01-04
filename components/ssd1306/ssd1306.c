@@ -49,9 +49,7 @@ static void oled_task(void *arg)
     }
 }
 
-/* ============================================================
- * I2C 底层通信
- * ============================================================ */
+// I2C 底层通信
 static esp_err_t _ssd1306_write_cmd(uint8_t *cmd, size_t len)
 {
     uint8_t ctrl = SSD1306_CTRL_CMD;
@@ -88,9 +86,7 @@ static esp_err_t _ssd1306_write_page(uint8_t *data128)
     return err;
 }
 
-/* ============================================================
- * 基础功能
- * ============================================================ */
+// 基础功能
 esp_err_t ssd1306_initialization(void)
 {
     if (g_i2c_service_installed == false)
@@ -179,9 +175,7 @@ esp_err_t ssd1306_invert(bool invert)
     return _ssd1306_write_cmd(&cmd, 1);
 }
 
-/* ============================================================
- * 绘图操作
- * ============================================================ */
+// 绘图操作
 void ssd1306_draw_point(uint8_t x, uint8_t y, uint8_t color)
 {
     if (x >= SSD1306_WIDTH || y >= SSD1306_HEIGHT)
@@ -238,9 +232,7 @@ void ssd1306_fill_rect(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t c
             ssd1306_draw_point(x, y, color);
 }
 
-/* ============================================================
- * 字符显示
- * ============================================================ */
+// 字符显示
 void ssd1306_show_char(uint8_t x, uint8_t y, char chr, uint8_t size, uint8_t color)
 {
     if (x >= SSD1306_WIDTH || y >= SSD1306_HEIGHT)
@@ -321,9 +313,7 @@ void ssd1306_show_string(uint8_t x, uint8_t y, const char *str, uint8_t size, ui
     }
 }
 
-/* ============================================================
- * 数字与浮点数显示
- * ============================================================ */
+// 数字与浮点数显示
 void ssd1306_show_num(uint8_t x, uint8_t y, int32_t num, uint8_t len, uint8_t size, uint8_t color)
 {
     if (len == 0 || len > 10)
@@ -346,8 +336,7 @@ void ssd1306_show_num(uint8_t x, uint8_t y, int32_t num, uint8_t len, uint8_t si
     ssd1306_show_string(x, y, buf, size, color);
 }
 
-void ssd1306_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_t dec_len,
-                        uint8_t size, uint8_t color)
+void ssd1306_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_t dec_len,uint8_t size, uint8_t color)
 {
     if (int_len == 0 || dec_len == 0)
         return;
@@ -376,11 +365,8 @@ void ssd1306_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_
     ssd1306_show_string(x, y, buf, size, color);
 }
 
-/* ============================================================
- * 图形显示
- * ============================================================ */
-void ssd1306_draw_bitmap(uint8_t x, uint8_t y, const uint8_t *bmp,
-                         uint8_t w, uint8_t h, uint8_t color)
+// 图形显示
+void ssd1306_draw_bitmap(uint8_t x, uint8_t y, const uint8_t *bmp,uint8_t w, uint8_t h, uint8_t color)
 {
     if (!bmp)
         return;
