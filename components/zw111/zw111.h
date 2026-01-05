@@ -6,23 +6,16 @@
 #include "app_config.h"
 #include "buzzer.h"
 
-// ========================== 硬件配置宏 ==========================
 #define EX_UART_NUM UART_NUM_2        // 指纹模块使用的UART端口
-#define ZW111_DEFAULT_ADDR 0xFFFFFFFF // 默认设备地址（4字节）
-#define ZW111_DEFAULT_HEADER 0xEF01   // 默认帧头（2字节）
 
-// ========================== 帧结构常量 ==========================
 #define CHECKSUM_LEN 2         // 校验和长度（字节，固定为2）
 #define CHECKSUM_START_INDEX 6 // 校验和计算起始索引（包标识位置）
-#define MIN_RESPONSE_LEN 12    // 最小应答帧长度（字节）
 
-// ========================== 包标识定义 ==========================
 #define PACKET_CMD 0x01       // 命令包（主机发送指令）
 #define PACKET_DATA_MORE 0x02 // 数据包（有后续包）
 #define PACKET_DATA_LAST 0x08 // 最后一个数据包（无后续）
 #define PACKET_RESPONSE 0x07  // 应答包（模块返回结果）
 
-// ========================== 指令码定义 ==========================
 #define CMD_AUTO_ENROLL 0x31      // 自动注册指纹指令
 #define CMD_AUTO_IDENTIFY 0x32    // 自动识别指纹指令
 #define CMD_CONTROL_BLN 0x3C      // 背光灯（LED）控制指令
@@ -32,8 +25,6 @@
 #define CMD_READ_INDEX_TABLE 0x1F // 读取指纹索引表指令
 #define CMD_SLEEP 0x33            // 模块休眠指令
 
-// ========================== LED控制宏定义 ==========================
-// LED功能码
 #define BLN_BREATH 1   // 普通呼吸灯模式
 #define BLN_FLASH 2    // 闪烁灯模式
 #define BLN_ON 3       // 常亮模式
@@ -95,11 +86,8 @@ extern QueueHandle_t fingerprint_queue; // 指纹模块→蜂鸣器的消息队�
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);
 esp_err_t fingerprint_initialization();
-esp_err_t delete_char(uint16_t ID, uint16_t count);
 void turn_on_fingerprint();
 void prepare_turn_off_fingerprint();
 void cancel_current_operation_and_execute_command();
-esp_err_t fingerprint_initialization_uart();
-esp_err_t fingerprint_deinitialization_uart();
 
 #endif

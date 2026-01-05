@@ -1,23 +1,15 @@
 #include "zw111.h"
 
-// ========================== 全局变量定义 ==========================
 const uint8_t FRAME_HEADER[2] = {0xEF, 0x01}; // 指纹模块帧头固定值
-const uint8_t BUZZER_NOOPEN = 0;              // 开门失败蜂鸣器叫声
-const uint8_t BUZZER_OPEN = 1;                // 开门成功蜂鸣器叫声
-const uint8_t BUZZER_TOUCH = 2;               // 触摸感应蜂鸣器叫声
-const uint8_t BUZZER_CARD = 4;                // 刷卡成功蜂鸣器叫声
 
 struct fingerprint_device zw111 = {0}; // 指纹模块结构体
 
 SemaphoreHandle_t fingerprint_semaphore = NULL; // 指纹模块的信号量，仅用于触摸之后开启模块
-// QueueHandle_t buzzer_queue;                     // 蜂鸣器鸣叫方式队列
+
 static QueueHandle_t uart2_queue; // UART2事件队列
 
-static const char *TAG = "zw101";
+static const char *TAG = "zw111";
 
-uint8_t way_to_open = 0; // 开锁方式：0=无效；1=指纹；2=密码；4=刷卡；8=APP
-
-// ========================== 通用工具函数 ==========================
 /**
  * @brief 计算数据帧的校验和
  * @param receive_data 数据帧缓冲区
@@ -91,7 +83,6 @@ static esp_err_t verify_received_data(const uint8_t *receive_data, uint16_t data
     return ESP_OK;
 }
 
-// ========================== 功能函数 ==========================
 /**
  * @brief 指纹模块自动注册函数
  * @param ID 指纹ID号（0-99，超出范围返回失败）
@@ -104,10 +95,7 @@ static esp_err_t verify_received_data(const uint8_t *receive_data, uint16_t data
  * @param requireRemove 手指离开要求：false=需离开；true=无需离开
  * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
  */
-static esp_err_t auto_enroll(uint16_t ID, uint8_t enrollTimes,
-                             bool ledControl, bool preprocess,
-                             bool returnStatus, bool allowOverwrite,
-                             bool allowDuplicate, bool requireRemove)
+static esp_err_t auto_enroll(uint16_t ID, uint8_t enrollTimes, bool ledControl, bool preprocess, bool returnStatus, bool allowOverwrite, bool allowDuplicate, bool requireRemove)
 {
     // 检查ID有效性
     if (ID >= 100)
@@ -228,8 +216,7 @@ static esp_err_t auto_identify(uint16_t ID, uint8_t scoreLevel, bool ledControl,
  * @param cycleTimes 循环次数（仅功能码1-呼吸灯/2-闪烁灯有效，0=无限循环）
  * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
  */
-static esp_err_t control_led(uint8_t functionCode, uint8_t startColor,
-                             uint8_t endColor, uint8_t cycleTimes)
+static esp_err_t control_led(uint8_t functionCode, uint8_t startColor, uint8_t endColor, uint8_t cycleTimes)
 {
     // 参数合法性检查
     if (functionCode < BLN_BREATH || functionCode > BLN_FADE_OUT)
@@ -237,7 +224,7 @@ static esp_err_t control_led(uint8_t functionCode, uint8_t startColor,
         ESP_LOGE(TAG, "LED控制失败：功能码无效（需1-6，当前%u）", functionCode);
         return ESP_FAIL;
     }
-    // 过滤颜色参数无效位（仅保留低3位）
+    // 过滤颜色参数无效位
     if ((startColor & 0xF8) != 0)
     {
         ESP_LOGE(TAG, "LED控制警告：起始颜色仅低3位有效，已过滤为0x%02X\n", startColor & 0x07);
@@ -283,6 +270,7 @@ static esp_err_t control_led(uint8_t functionCode, uint8_t startColor,
         return ESP_FAIL;
     }
 }
+
 /**
  * @brief 指纹模块LED跑马灯控制函数（七彩循环模式）
  * @param startColor 起始颜色配置（参考LED_xxx宏定义，仅低3位有效）
@@ -347,7 +335,7 @@ static esp_err_t control_colorful_led(uint8_t startColor, uint8_t timeBit, uint8
  * @param count 删除数量（1-100，需确保不超出ID范围）
  * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
  */
-esp_err_t delete_char(uint16_t ID, uint16_t count)
+static esp_err_t delete_char(uint16_t ID, uint16_t count)
 {
     // 参数合法性检查
     if (ID >= 100)
@@ -485,7 +473,7 @@ static esp_err_t sleep()
         PACKET_CMD,                                                                                     // 包标识(1字节)
         0x00, 0x03,                                                                                     // 数据长度(2字节)
         CMD_SLEEP,                                                                                      // 指令码(1字节)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        0x00, 0x00                                                                                      // 校验和(2字节，待计算
     };
     // 计算并填充校验和
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
@@ -652,7 +640,7 @@ uint8_t get_mini_unused_id()
  * @param new_id 要插入的新指纹ID（应通过get_mini_unused_id()获取）
  * @return 成功插入返回ESP_OK，失败返回ESP_FAIL
  */
-esp_err_t insert_fingerprint_id(uint8_t new_id)
+static esp_err_t insert_fingerprint_id(uint8_t new_id)
 {
     // 检查ID有效性
     if (new_id >= 100)
@@ -705,59 +693,10 @@ void cancel_current_operation_and_execute_command()
 }
 
 /**
- * @brief 打开指纹模块
- * @note 该函数会给指纹模块供电，并设置状态为已供电
- * @return void
- */
-void turn_on_fingerprint()
-{
-    gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给指纹模块供电
-    fingerprint_initialization_uart();      // 初始化UART通信
-    xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
-    zw111.power = true;
-    ESP_LOGI(TAG, "指纹模块已供电");
-}
-
-/**
- * @brief 模块准备关闭
- * @note 该函数会准备关闭指纹模块，发送休眠命令并设置状态为休眠
- * @return void
- */
-void prepare_turn_off_fingerprint()
-{
-    zw111.state = 0x0B; // 切换为休眠状态
-    // 发送休眠命令
-    if (sleep() == ESP_OK)
-    {
-        ESP_LOGI(TAG, "准备休眠，模块状态已切换为休眠状态");
-    }
-    else
-    {
-        // 休眠操作失败
-        ESP_LOGE(TAG, "休眠当前操作失败");
-    }
-}
-
-/**
- * @brief 触摸中断服务程序
- * @param arg 中断参数（传入GPIO编号）
- * @return void
- */
-static void IRAM_ATTR gpio_isr_handler(void *arg)
-{
-    uint32_t gpio_num = (uint32_t)arg;
-    if (gpio_num == FINGERPRINT_INT_PIN && gpio_get_level(FINGERPRINT_INT_PIN) == 1)
-    {
-        ESP_EARLY_LOGI(TAG, "指纹模块中断触发, gpio_num=%u", gpio_num);
-        xSemaphoreGiveFromISR(fingerprint_semaphore, NULL);
-    }
-}
-
-/**
  * @brief 初始化指纹模块UART通信
  * @return esp_err_t ESP_OK=初始化成功，其他=失败
  */
-esp_err_t fingerprint_initialization_uart()
+static esp_err_t fingerprint_initialization_uart()
 {
     esp_err_t ret = ESP_OK;
     // 检查是否已安装
@@ -822,7 +761,7 @@ esp_err_t fingerprint_initialization_uart()
  * @brief 删除指纹模块UART通信
  * @return esp_err_t ESP_OK=删除成功，ESP_FAIL=删除失败
  */
-esp_err_t fingerprint_deinitialization_uart()
+static esp_err_t fingerprint_deinitialization_uart()
 {
     if (!uart_is_driver_installed(EX_UART_NUM))
     {
@@ -855,6 +794,55 @@ esp_err_t fingerprint_deinitialization_uart()
 }
 
 /**
+ * @brief 打开指纹模块
+ * @note 该函数会给指纹模块供电，并设置状态为已供电
+ * @return void
+ */
+void turn_on_fingerprint()
+{
+    gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给指纹模块供电
+    fingerprint_initialization_uart();      // 初始化UART通信
+    xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
+    zw111.power = true;
+    ESP_LOGI(TAG, "指纹模块已供电");
+}
+
+/**
+ * @brief 模块准备关闭
+ * @note 该函数会准备关闭指纹模块，发送休眠命令并设置状态为休眠
+ * @return void
+ */
+void prepare_turn_off_fingerprint()
+{
+    zw111.state = 0x0B; // 切换为休眠状态
+    // 发送休眠命令
+    if (sleep() == ESP_OK)
+    {
+        ESP_LOGI(TAG, "准备休眠，模块状态已切换为休眠状态");
+    }
+    else
+    {
+        // 休眠操作失败
+        ESP_LOGE(TAG, "休眠当前操作失败");
+    }
+}
+
+/**
+ * @brief 触摸中断服务程序
+ * @param arg 中断参数（传入GPIO编号）
+ * @return void
+ */
+static void IRAM_ATTR gpio_isr_handler(void *arg)
+{
+    uint32_t gpio_num = (uint32_t)arg;
+    if (gpio_num == FINGERPRINT_INT_PIN && gpio_get_level(FINGERPRINT_INT_PIN) == 1)
+    {
+        ESP_EARLY_LOGI(TAG, "指纹模块中断触发, gpio_num=%u", gpio_num);
+        xSemaphoreGiveFromISR(fingerprint_semaphore, NULL);
+    }
+}
+
+/**
  * @brief 初始化指纹模块UART通信
  * @return esp_err_t ESP_OK=初始化成功，ESP_FAIL=数据无效或初始化失败
  */
@@ -870,13 +858,13 @@ esp_err_t fingerprint_initialization()
     zw111.deviceAddress[1] = 0xFF;
     zw111.deviceAddress[2] = 0xFF;
     zw111.deviceAddress[3] = 0xFF;
-    gpio_config_t zw101_int_gpio_config = {
+    gpio_config_t zw111_int_gpio_config = {
         .pin_bit_mask = (1ULL << FINGERPRINT_INT_PIN),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_ENABLE,
         .intr_type = GPIO_INTR_POSEDGE};
-    gpio_config(&zw101_int_gpio_config);
+    gpio_config(&zw111_int_gpio_config);
     gpio_config_t fingerprint_ctl_gpio_config = {
         .pin_bit_mask = (1ULL << FINGERPRINT_CTL_PIN),
         .mode = GPIO_MODE_OUTPUT,
@@ -892,7 +880,7 @@ esp_err_t fingerprint_initialization()
         g_gpio_isr_service_installed = true;
     }
     gpio_isr_handler_add(FINGERPRINT_INT_PIN, gpio_isr_handler, (void *)FINGERPRINT_INT_PIN);
-    ESP_LOGI(TAG, "zw101 interrupt gpio configured");
+    ESP_LOGI(TAG, "zw111 interrupt gpio configured");
     // Create a task to handler UART event from ISR
     xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
     ESP_LOGI(TAG, "uart task created");
@@ -949,11 +937,12 @@ void fingerprint_task(void *pvParameters)
             {
                 ESP_LOGE(TAG, "当前状态为异常状态，准备关闭指纹模块");
                 cancel_current_operation_and_execute_command(); // 取消当前操作
-                prepare_turn_off_fingerprint();                  // 准备关闭指纹模块
+                prepare_turn_off_fingerprint();                 // 准备关闭指纹模块
             }
         }
     }
 }
+
 /**
  * @brief UART事件处理任务
  * @param pvParameters 任务参数（未使用）
@@ -1077,8 +1066,6 @@ void uart_task(void *pvParameters)
                     {
                         if (dtmp[9] == 0x00)
                         {
-                            way_to_open = 0x01; // 通过指纹开门
-
                             uint8_t message = 0x01;
                             xQueueSend(fingerprint_queue, &message, portMAX_DELAY);
                             uint16_t fingerID = (dtmp[11] << 8) | dtmp[12]; // 指纹ID

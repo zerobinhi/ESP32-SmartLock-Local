@@ -244,7 +244,7 @@ esp_err_t nvs_custom_erase_all(const char *part_name, const char *ns_name);
 /**
  * @brief 擦除整个NVS分区（恢复出厂设置用）
  * @param part_name 分区名（NULL使用默认分区）
- * @return esp_err_t
+ * @return esp_err_t 错误码
  */
 esp_err_t nvs_custom_erase_partition(const char *part_name);
 
@@ -261,7 +261,7 @@ bool nvs_custom_key_exists(const char *part_name, const char *ns_name, const cha
  * @brief 获取NVS分区使用情况
  * @param part_name 分区名（NULL使用默认）
  * @param out_stats 输出统计信息
- * @return esp_err_t
+ * @return esp_err_t 错误码
  */
 esp_err_t nvs_custom_get_stats(const char *part_name, nvs_stats_t *out_stats);
 
