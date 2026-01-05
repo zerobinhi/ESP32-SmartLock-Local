@@ -13,14 +13,13 @@
 #define WS_RECV_BUFFER_SIZE 128
 #define MAX_WS_CLIENTS 5
 
-extern struct fingerprint_device zw111; // 指纹设备全局变量
+extern struct fingerprint_device zw111; // Fingerprint device instance
 
 extern uint64_t g_card_id_value[MAX_CARDS];
 extern int g_card_count;
 
 httpd_handle_t web_server_start(void);
 
-// 对外可调用接口
 void send_card_list();
 void send_fingerprint_list();
 void send_status_msg(const char *message);

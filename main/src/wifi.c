@@ -11,12 +11,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     if (event_id == WIFI_EVENT_AP_STACONNECTED)
     {
         wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
-        ESP_LOGI(TAG, "设备 " MACSTR " 已连接, AID=%d", MAC2STR(event->mac), event->aid);
+        ESP_LOGI(TAG, "Device " MACSTR " connected, AID=%d", MAC2STR(event->mac), event->aid);
     }
     else if (event_id == WIFI_EVENT_AP_STADISCONNECTED)
     {
         wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
-        ESP_LOGI(TAG, "设备 " MACSTR " 已断开, AID=%d", MAC2STR(event->mac), event->aid);
+        ESP_LOGI(TAG, "Device " MACSTR " disconnected, AID=%d", MAC2STR(event->mac), event->aid);
     }
 }
 
@@ -34,7 +34,7 @@ void wifi_init_softap(void)
     size_t ssid_len = sizeof(g_ap_ssid);
     size_t pass_len = sizeof(g_ap_pass);
 
-    // 读取NVS中的WiFi配置（如果没有则使用默认值）
+    // Read WiFi configuration from NVS (use default values if not exist)
     if (nvs_custom_get_str(NULL, "wifi", "wifi_ssid", g_ap_ssid, &ssid_len) != ESP_OK)
     {
         strncpy(g_ap_ssid, DEFAULT_AP_SSID, sizeof(g_ap_ssid));
@@ -62,9 +62,9 @@ void wifi_init_softap(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "WiFi AP初始化完成. SSID:%s 密码:%s 信道:%d", g_ap_ssid, g_ap_pass, AP_CHANNEL);
+    ESP_LOGI(TAG, "WiFi AP initialization completed. SSID:%s Password:%s Channel:%d", g_ap_ssid, g_ap_pass, AP_CHANNEL);
 
-    // get the IP of the access point to redirect to
+    // Get the IP of the access point to redirect to
     esp_netif_ip_info_t ip_info;
     esp_netif_get_ip_info(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"), &ip_info);
 
@@ -72,23 +72,23 @@ void wifi_init_softap(void)
     inet_ntoa_r(ip_info.ip.addr, ip_addr, 16);
     ESP_LOGI(TAG, "Set up softAP with IP: %s", ip_addr);
 
-    // turn the IP into a URI
+    // Turn the IP into a URI
     char *captiveportal_uri = (char *)malloc(32 * sizeof(char));
     assert(captiveportal_uri && "Failed to allocate captiveportal_uri");
     strcpy(captiveportal_uri, "http://");
     strcat(captiveportal_uri, ip_addr);
 
-    // get a handle to configure DHCP with
+    // Get a handle to configure DHCP with
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
 
-    // set the DHCP option 114
+    // Set the DHCP option 114
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_dhcps_stop(netif));
     ESP_ERROR_CHECK(esp_netif_dhcps_option(netif, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, captiveportal_uri, strlen(captiveportal_uri)));
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_dhcps_start(netif));
 
     ESP_LOGI(TAG, "DHCP Captive Portal URI set to %s", captiveportal_uri);
 
-    // ---------- 启动 DNS 拦截服务 ----------
+    // ---------- Start DNS intercept service ----------
     dns_server_config_t dns_config = DNS_SERVER_CONFIG_SINGLE("*", "WIFI_AP_DEF");
     start_dns_server(&dns_config);
     ESP_LOGI(TAG, "DNS Captive Portal server started (redirect all domains)");

@@ -3,7 +3,7 @@
 static const char *TAG = "spiffs";
 
 /**
- * @brief 初始化SPIFFS并加载index.html到内存
+ * @brief Initialize SPIFFS and load index.html into memory
  */
 void spiffs_init_and_load_webpage(void)
 {
@@ -15,31 +15,31 @@ void spiffs_init_and_load_webpage(void)
     esp_err_t ret = esp_vfs_spiffs_register(&conf);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "SPIFFS 注册失败 (%s)", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "SPIFFS registration failed (%s)", esp_err_to_name(ret));
         return;
     }
-    // 动态分配缓冲区
+    // Dynamically allocate buffer
     if (!index_html)
     {
         index_html = malloc(INDEX_HTML_BUFFER_SIZE);
         if (!index_html)
         {
-            ESP_LOGE(TAG, "index_html 缓冲区分配失败");
+            ESP_LOGE(TAG, "index_html buffer allocation failed");
             free(index_html);
             return;
         }
     }
-    // 检查并加载 index.html
+    // Check and load index.html
     struct stat st;
     if (stat(INDEX_HTML_PATH, &st) != 0)
     {
-        ESP_LOGE(TAG, "SPIFFS 中未找到 index.html");
+        ESP_LOGE(TAG, "index.html not found in SPIFFS");
         free(index_html);
         return;
     }
     if (st.st_size >= INDEX_HTML_BUFFER_SIZE)
     {
-        ESP_LOGE(TAG, "index.html 文件过大 (大小: %ld, 缓冲区: %d)",
+        ESP_LOGE(TAG, "index.html file is too large (size: %ld, buffer: %d)",
                  st.st_size, INDEX_HTML_BUFFER_SIZE);
         free(index_html);
         return;
@@ -47,7 +47,7 @@ void spiffs_init_and_load_webpage(void)
     FILE *fp = fopen(INDEX_HTML_PATH, "r");
     if (!fp)
     {
-        ESP_LOGE(TAG, "打开 index.html 失败");
+        ESP_LOGE(TAG, "Failed to open index.html");
         free(index_html);
         return;
     }
@@ -55,7 +55,7 @@ void spiffs_init_and_load_webpage(void)
     fclose(fp);
     if (bytes_read != st.st_size)
     {
-        ESP_LOGE(TAG, "读取 index.html 失败 (已读: %ld, 预期: %ld)",
+        ESP_LOGE(TAG, "Failed to read index.html (read: %ld, expected: %ld)",
                  bytes_read, st.st_size);
         free(index_html);
         index_html = NULL;
@@ -63,6 +63,6 @@ void spiffs_init_and_load_webpage(void)
     else
     {
         index_html[bytes_read] = '\0';
-        ESP_LOGI(TAG, "index.html 加载成功 (大小: %ld)", st.st_size);
+        ESP_LOGI(TAG, "index.html loaded successfully (size: %ld)", st.st_size);
     }
 }

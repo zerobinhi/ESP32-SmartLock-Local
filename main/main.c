@@ -85,7 +85,7 @@ void app_main(void)
 
     // spiffs_init_and_load_webpage();
     // wifi_init_softap();
-    // web_server_start(); // 启动Web服务器
+    // web_server_start(); // start web server
 
     ESP_LOGI(TAG, "Function: %s, File: %s, Line: %d\n", __func__, __FILE__, __LINE__);
 

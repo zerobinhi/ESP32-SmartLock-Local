@@ -7,7 +7,7 @@ static esp_err_t css_handler(httpd_req_t *req);
 static esp_err_t ws_handler(httpd_req_t *req);
 static esp_err_t favicon_handler(httpd_req_t *req);
 
-// 标志位
+// Flag bits
 bool g_ready_add_fingerprint = false;
 bool g_cancel_add_fingerprint = false;
 bool g_ready_delete_fingerprint = false;
@@ -20,7 +20,7 @@ uint8_t g_deleteFingerprintID = 0;
 
 httpd_handle_t server = NULL;
 
-// 保存已连接客户端 fd
+// Save file descriptors of connected clients
 static int ws_clients[MAX_WS_CLIENTS] = {0};
 static int ws_client_count = 0;
 
@@ -36,18 +36,18 @@ esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
 }
 
 /**
- * @brief 启动 Web 服务器
+ * @brief Start the Web server
  */
 httpd_handle_t web_server_start(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 32768; // 增加栈大小
+    config.stack_size = 32768; // Increase stack size
     config.max_open_sockets = 13;
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     // -------------------------------
-    // URI 处理器定义
+    // URI handler definitions
     // -------------------------------
     static const httpd_uri_t index_uri = {
         .uri = "/",
@@ -75,49 +75,49 @@ httpd_handle_t web_server_start(void)
         .user_ctx = NULL};
 
     // -------------------------------
-    // 启动服务器
+    // Start server
     // -------------------------------
     if (httpd_start(&server, &config) != ESP_OK)
     {
-        ESP_LOGE(TAG, "Web 服务器启动失败");
+        ESP_LOGE(TAG, "Web server startup failed");
         return NULL;
     }
 
-    httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, http_404_error_handler); // 注册404重定向
+    httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, http_404_error_handler); // Register 404 redirect
     httpd_register_uri_handler(server, &index_uri);
     httpd_register_uri_handler(server, &css_uri);
     httpd_register_uri_handler(server, &ws_uri);
     httpd_register_uri_handler(server, &favicon_uri);
 
-    ESP_LOGI(TAG, "Web 服务器启动成功");
+    ESP_LOGI(TAG, "Web server started successfully");
     return server;
 }
 
 /**
- * 主页面请求处理器
+ * Root page request handler
  */
 static esp_err_t root_handler(httpd_req_t *req)
 {
-    ESP_LOGI(TAG, "收到主页面请求");
+    ESP_LOGI(TAG, "Received root page request");
     if (!index_html)
     {
-        ESP_LOGE(TAG, "index_html 未加载");
+        ESP_LOGE(TAG, "index_html not loaded");
         return httpd_resp_send_500(req);
     }
 
     esp_err_t res = httpd_resp_set_type(req, "text/html");
     if (res != ESP_OK)
     {
-        ESP_LOGE(TAG, "设置内容类型失败");
+        ESP_LOGE(TAG, "Failed to set content type");
         return httpd_resp_send_500(req);
     }
-    
-    httpd_resp_set_hdr(req, "Connection", "close"); // 防止 Keep-Alive 问题
+
+    httpd_resp_set_hdr(req, "Connection", "close"); // Prevent Keep-Alive issues
 
     res = httpd_resp_send(req, index_html, HTTPD_RESP_USE_STRLEN);
     if (res != ESP_OK)
     {
-        ESP_LOGE(TAG, "发送主页面失败 (%s)", esp_err_to_name(res));
+        ESP_LOGE(TAG, "Failed to send root page (%s)", esp_err_to_name(res));
         return ESP_FAIL;
     }
 
@@ -125,20 +125,20 @@ static esp_err_t root_handler(httpd_req_t *req)
 }
 
 /**
- * CSS样式请求处理器
+ * CSS style request handler
  */
 static esp_err_t css_handler(httpd_req_t *req)
 {
     struct stat st;
     if (stat(CSS_PATH, &st) != 0)
     {
-        ESP_LOGE(TAG, "未找到style.css");
+        ESP_LOGE(TAG, "style.css not found");
         return httpd_resp_send_404(req);
     }
     FILE *fp = fopen(CSS_PATH, "rb");
     if (!fp)
     {
-        ESP_LOGE(TAG, "打开style.css失败");
+        ESP_LOGE(TAG, "Failed to open style.css");
         return httpd_resp_send_500(req);
     }
     httpd_resp_set_type(req, "text/css");
@@ -149,7 +149,7 @@ static esp_err_t css_handler(httpd_req_t *req)
         if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK)
         {
             fclose(fp);
-            ESP_LOGE(TAG, "发送CSS数据失败");
+            ESP_LOGE(TAG, "Failed to send CSS data");
             return ESP_FAIL;
         }
     }
@@ -158,20 +158,20 @@ static esp_err_t css_handler(httpd_req_t *req)
 }
 
 /**
- * favicon.ico 请求处理器
+ * favicon.ico request handler
  */
 static esp_err_t favicon_handler(httpd_req_t *req)
 {
     struct stat st;
     if (stat(FAVICON_PATH, &st) != 0)
     {
-        ESP_LOGE(TAG, "未找到favicon.ico");
+        ESP_LOGE(TAG, "favicon.ico not found");
         return httpd_resp_send_404(req);
     }
     FILE *fp = fopen(FAVICON_PATH, "rb");
     if (!fp)
     {
-        ESP_LOGE(TAG, "打开favicon.ico失败");
+        ESP_LOGE(TAG, "Failed to open favicon.ico");
         return httpd_resp_send_500(req);
     }
     httpd_resp_set_type(req, "image/x-icon");
@@ -182,7 +182,7 @@ static esp_err_t favicon_handler(httpd_req_t *req)
         if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK)
         {
             fclose(fp);
-            ESP_LOGE(TAG, "发送favicon.ico数据失败");
+            ESP_LOGE(TAG, "Failed to send favicon.ico data");
             return ESP_FAIL;
         }
     }
@@ -191,15 +191,15 @@ static esp_err_t favicon_handler(httpd_req_t *req)
 }
 
 /**
- * WebSocket请求处理器 - 处理按钮命令并打印提示
+ * WebSocket request handler - Process button commands and print prompts
  */
 static esp_err_t ws_handler(httpd_req_t *req)
 {
-    ESP_LOGI(TAG, "WebSocket 请求处理器被调用, method:%d", req->method);
+    ESP_LOGI(TAG, "WebSocket request handler called, method:%d", req->method);
 
     if (req->method == HTTP_GET)
     {
-        ESP_LOGI(TAG, "客户端尝试建立 WebSocket 连接");
+        ESP_LOGI(TAG, "Client attempts to establish WebSocket connection");
         int fd = httpd_req_to_sockfd(req);
         bool found = false;
 
@@ -207,7 +207,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         {
             if (ws_clients[i] == fd)
             {
-                ESP_LOGW(TAG, "客户端 fd=%d 已存在", fd);
+                ESP_LOGW(TAG, "Client fd=%d already exists", fd);
                 found = true;
                 break;
             }
@@ -218,12 +218,11 @@ static esp_err_t ws_handler(httpd_req_t *req)
             if (ws_client_count < MAX_WS_CLIENTS)
             {
                 ws_clients[ws_client_count++] = fd;
-                ESP_LOGI(TAG, "新客户端加入，fd=%d，总数=%d", fd, ws_client_count);
+                ESP_LOGI(TAG, "New client joined, fd=%d, total=%d", fd, ws_client_count);
             }
             else
             {
-                ESP_LOGW(TAG, "客户端数量已达上限，拒绝加入 fd=%d", fd);
-
+                ESP_LOGW(TAG, "Client limit reached, rejecting fd=%d", fd);
                 return ESP_FAIL;
             }
         }
@@ -232,63 +231,63 @@ static esp_err_t ws_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    // 接收数据
+    // Receive data
     httpd_ws_frame_t ws_pkt = {0};
     char recv_buf[WS_RECV_BUFFER_SIZE] = {0};
     ws_pkt.payload = (uint8_t *)recv_buf;
 
-    // 解析帧头，获取帧长度
+    // Parse frame header to get frame length
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "接收帧头失败: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to receive frame header: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    // 限制最大长度，防止缓冲区溢出
+    // Limit maximum length to prevent buffer overflow
     if (ws_pkt.len >= WS_RECV_BUFFER_SIZE)
     {
-        ESP_LOGW(TAG, "数据过长，截断为 %u 字节", WS_RECV_BUFFER_SIZE - 1);
+        ESP_LOGW(TAG, "Data too long, truncated to %u bytes", WS_RECV_BUFFER_SIZE - 1);
         ws_pkt.len = WS_RECV_BUFFER_SIZE - 1;
     }
 
-    // 接收实际数据
+    // Receive actual data
     if (ws_pkt.len > 0)
     {
         ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
         if (ret != ESP_OK)
         {
-            ESP_LOGE(TAG, "接收数据失败: %s", esp_err_to_name(ret));
+            ESP_LOGE(TAG, "Failed to receive data: %s", esp_err_to_name(ret));
             return ret;
         }
 
-        // 确保字符串以 '\0' 结尾
+        // Ensure string ends with '\0'
         recv_buf[ws_pkt.len] = '\0';
-        ESP_LOGI(TAG, "收到数据 [长度:%u]: %s", ws_pkt.len, recv_buf);
+        ESP_LOGI(TAG, "Received data [length:%u]: %s", ws_pkt.len, recv_buf);
     }
     else
     {
-        // 空数据直接返回
+        // Return directly for empty data
         return ESP_OK;
     }
 
-    // 命令处理逻辑
+    // Command processing logic
     if (strcmp(recv_buf, "add_card") == 0)
     {
-        ESP_LOGI(TAG, "处理添加卡片命令");
-        // 检查是否还有空间
+        ESP_LOGI(TAG, "Processing add card command");
+        // Check if there is remaining space
         if (g_card_count < MAX_CARDS)
         {
             g_ready_add_card = true;
         }
         else
         {
-            send_status_msg("卡片数量已达上限");
+            send_status_msg("Card limit reached");
         }
     }
     else if (strcmp(recv_buf, "cancel_add_card") == 0)
     {
-        ESP_LOGI(TAG, "处理取消添加卡片命令");
+        ESP_LOGI(TAG, "Processing cancel add card command");
         g_ready_add_card = false;
     }
     else if (strstr(recv_buf, "delete_card:") != NULL)
@@ -296,14 +295,14 @@ static esp_err_t ws_handler(httpd_req_t *req)
         char *prefix = "delete_card:";
         strncpy(g_delete_card_number, recv_buf + strlen(prefix), sizeof(g_delete_card_number) - 1);
         g_delete_card_number[sizeof(g_delete_card_number) - 1] = '\0';
-        ESP_LOGI(TAG, "处理删除指定卡片命令，卡号: %s", g_delete_card_number);
+        ESP_LOGI(TAG, "Processing delete specified card command, card number: %s", g_delete_card_number);
 
-        g_ready_delete_card = true; //todo
+        g_ready_delete_card = true; // todo
         // for (uint8_t i = 0; i < g_card_count; i++)
         // {
         //     if (strcmp(g_delete_card_number, g_card_id_value[i]) == 0)
         //     {
-        //         // 找到匹配项，删除卡片
+        //         // Find matching item, delete card
         //         for (uint8_t j = i; j < g_card_count - 1; j++)
         //         {
         //             g_card_id_value[j] = g_card_id_value[j + 1];
@@ -311,17 +310,16 @@ static esp_err_t ws_handler(httpd_req_t *req)
         //         }
         //         g_card_count--;
         //         nvs_custom_set_u8(NULL, "card", "count", g_card_count);
-        //         send_operation_result("card_deleted", true); // 发送操作结果
-        //         ESP_LOGI(TAG, "卡片 %s 删除成功", g_delete_card_number);
+        //         send_operation_result("card_deleted", true); // Send operation result
+        //         ESP_LOGI(TAG, "Card %s deleted successfully", g_delete_card_number);
         //         break;
         //     }
         // }
-        
     }
     else if (strcmp(recv_buf, "add_fingerprint") == 0)
     {
-        ESP_LOGI(TAG, "处理添加指纹命令, 当前模组状态: %u", zw111.state);
-        // 检查是否还有空间
+        ESP_LOGI(TAG, "Processing add fingerprint command, current module state: %u", zw111.state);
+        // Check if there is remaining space
         if (zw111.fingerNumber < 100)
         {
             if (zw111.power == true)
@@ -331,31 +329,31 @@ static esp_err_t ws_handler(httpd_req_t *req)
             }
             else
             {
-                zw111.state = 0x02;    // 设置状态为注册指纹状态
-                turn_on_fingerprint(); // 开机！
+                zw111.state = 0x02;    // Set state to enroll fingerprint state
+                turn_on_fingerprint(); // Power on!
             }
         }
         else
         {
-            send_status_msg("指纹数量已达上限");
+            send_status_msg("Fingerprint limit reached");
         }
     }
     else if (strcmp(recv_buf, "cancel_add_fingerprint") == 0)
     {
-        ESP_LOGI(TAG, "处理取消添加指纹命令");
+        ESP_LOGI(TAG, "Processing cancel add fingerprint command");
         g_cancel_add_fingerprint = true;
         cancel_current_operation_and_execute_command();
     }
     else if (strcmp(recv_buf, "clear_cards") == 0)
     {
-        ESP_LOGI(TAG, "处理清空卡片命令");
+        ESP_LOGI(TAG, "Processing clear all cards command");
         g_card_count = 0;
         nvs_custom_set_u8(NULL, "card", "count", g_card_count);
-        send_operation_result("card_cleared", true); // 发送操作结果
+        send_operation_result("card_cleared", true); // Send operation result
     }
     else if (strcmp(recv_buf, "clear_fingerprints") == 0)
     {
-        ESP_LOGI(TAG, "处理清空指纹命令, 当前模组状态: %u", zw111.state);
+        ESP_LOGI(TAG, "Processing clear all fingerprints command, current module state: %u", zw111.state);
         g_ready_delete_all_fingerprint = true;
         if (zw111.power == true)
         {
@@ -363,25 +361,25 @@ static esp_err_t ws_handler(httpd_req_t *req)
         }
         else
         {
-            zw111.state = 0x03;    // 设置状态为删除指纹状态
-            turn_on_fingerprint(); // 开机！
+            zw111.state = 0x03;    // Set state to delete fingerprint state
+            turn_on_fingerprint(); // Power on!
         }
     }
     else if (strcmp(recv_buf, "refresh_cards") == 0)
     {
-        ESP_LOGI(TAG, "处理刷新卡片命令");
+        ESP_LOGI(TAG, "Processing refresh card list command");
         send_card_list();
     }
     else if (strcmp(recv_buf, "refresh_fingerprints") == 0)
     {
-        ESP_LOGI(TAG, "处理刷新指纹命令");
+        ESP_LOGI(TAG, "Processing refresh fingerprint list command");
         send_fingerprint_list();
     }
     else if (strstr(recv_buf, "delete_fingerprint:") != NULL)
     {
         char *prefix = "delete_fingerprint:";
         g_deleteFingerprintID = atoi(recv_buf + strlen(prefix));
-        ESP_LOGI(TAG, "处理删除指定指纹命令，ID: %u，当前模组状态: %u", g_deleteFingerprintID, zw111.state);
+        ESP_LOGI(TAG, "Processing delete specified fingerprint command, ID: %u, current module state: %u", g_deleteFingerprintID, zw111.state);
         g_ready_delete_fingerprint = true;
         if (zw111.power == true)
         {
@@ -389,19 +387,20 @@ static esp_err_t ws_handler(httpd_req_t *req)
         }
         else
         {
-            zw111.state = 0x03;    // 设置状态为删除指纹状态
-            turn_on_fingerprint(); // 开机！
+            zw111.state = 0x03;    // Set state to delete fingerprint state
+            turn_on_fingerprint(); // Power on!
         }
     }
     else if (ws_pkt.len > 0)
     {
-        ESP_LOGI(TAG, "收到未知命令: %s", recv_buf);
-        send_status_msg("未知命令");
+        ESP_LOGI(TAG, "Received unknown command: %s", recv_buf);
+        send_status_msg("Unknown command");
     }
     return ESP_OK;
 }
+
 /**
- * WebSocket广播JSON
+ * WebSocket broadcast JSON data
  */
 static esp_err_t ws_broadcast_json(cJSON *json)
 {
@@ -414,12 +413,12 @@ static esp_err_t ws_broadcast_json(cJSON *json)
         .type = HTTPD_WS_TYPE_TEXT,
         .payload = (uint8_t *)json_str,
         .len = strlen(json_str)};
-    ESP_LOGI(TAG, "广播消息: %s", json_str);
+    ESP_LOGI(TAG, "Broadcasting message: %s", json_str);
     for (int i = 0; i < ws_client_count; i++)
     {
         if (httpd_ws_send_frame_async(server, ws_clients[i], &ws_pkt) != ESP_OK)
         {
-            ESP_LOGW(TAG, "客户端 fd=%d 发送失败，移除，当前客户端数:%d", ws_clients[i], ws_client_count);
+            ESP_LOGW(TAG, "Failed to send to client fd=%d, removing, current client count:%d", ws_clients[i], ws_client_count);
             ws_clients[i] = ws_clients[--ws_client_count];
             i--;
         }
@@ -429,7 +428,7 @@ static esp_err_t ws_broadcast_json(cJSON *json)
 }
 
 /**
- * 发送卡片列表
+ * Send card list
  */
 void send_card_list()
 {
@@ -448,7 +447,7 @@ void send_card_list()
 }
 
 /**
- * 发送指纹列表
+ * Send fingerprint list
  */
 void send_fingerprint_list()
 {
@@ -467,7 +466,7 @@ void send_fingerprint_list()
 }
 
 /**
- * 发送状态消息
+ * Send status message
  */
 void send_status_msg(const char *message)
 {
@@ -479,14 +478,14 @@ void send_status_msg(const char *message)
 }
 
 /**
- * 发送初始化数据
+ * Send initialization data
  */
 void send_init_data()
 {
     cJSON *root = cJSON_CreateObject();
     cJSON *cards_array = cJSON_CreateArray();
     cJSON *fingers_array = cJSON_CreateArray();
-    // 添加卡片数据
+    // Add card data
     for (int i = 0; i < g_card_count; i++)
     {
         cJSON *item = cJSON_CreateObject();
@@ -494,7 +493,7 @@ void send_init_data()
         cJSON_AddItemToArray(cards_array, item);
     }
 
-    // 添加指纹数据
+    // Add fingerprint data
     for (int i = 0; i < zw111.fingerNumber; i++)
     {
         cJSON *item = cJSON_CreateObject();
@@ -504,7 +503,7 @@ void send_init_data()
 
     cJSON_AddStringToObject(root, "type", "init_data");
 
-    // 添加版本号
+    // Add version number
     cJSON_AddStringToObject(root, "version", CONFIG_APP_PROJECT_VER);
 
     cJSON_AddItemToObject(root, "cards", cards_array);
@@ -514,7 +513,7 @@ void send_init_data()
 }
 
 /**
- * 发送操作结果
+ * Send operation result
  */
 void send_operation_result(const char *message, bool result)
 {
