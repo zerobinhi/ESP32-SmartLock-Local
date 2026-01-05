@@ -1,26 +1,26 @@
 #include "zw111.h"
 
-const uint8_t FRAME_HEADER[2] = {0xEF, 0x01}; // 指纹模块帧头固定值
+const uint8_t FRAME_HEADER[2] = {0xEF, 0x01}; // Fixed frame header value for fingerprint module
 
-struct fingerprint_device zw111 = {0}; // 指纹模块结构体
+struct fingerprint_device zw111 = {0}; // Fingerprint module structure instance
 
-SemaphoreHandle_t fingerprint_semaphore = NULL; // 指纹模块的信号量，仅用于触摸之后开启模块
+SemaphoreHandle_t fingerprint_semaphore = NULL; // Semaphore for fingerprint module, only used to activate the module after touch detection
 
-static QueueHandle_t uart2_queue; // UART2事件队列
+static QueueHandle_t uart2_queue; // UART2 event queue
 
-static const char *TAG = "zw111";
+static const char *TAG = "ZW111";
 
 /**
- * @brief 计算数据帧的校验和
- * @param receive_data 数据帧缓冲区
- * @param data_length 数据帧总长度
- * @return uint16_t 计算得到的16位校验和（高字节在前），参数无效返回0
+ * @brief Calculate the checksum of the data frame
+ * @param receive_data Data frame buffer
+ * @param data_length Total length of the data frame
+ * @return uint16_t Calculated 16-bit checksum (high byte first), returns 0 if parameters are invalid
  */
 static uint16_t calculate_checksum(const uint8_t *receive_data, uint16_t data_length)
 {
     uint16_t checksum = 0;
-    uint8_t checksumEndIndex = data_length - CHECKSUM_LEN - 1; // 校验和前一字节索引
-    // 累加校验范围：从CHECKSUM_START_INDEX到checksumEndIndex
+    uint8_t checksumEndIndex = data_length - CHECKSUM_LEN - 1; // Index of the byte before checksum field
+    // Accumulation range for checksum: from CHECKSUM_START_INDEX to checksumEndIndex
     for (uint8_t i = CHECKSUM_START_INDEX; i <= checksumEndIndex; i++)
     {
         checksum += receive_data[i];
@@ -29,565 +29,547 @@ static uint16_t calculate_checksum(const uint8_t *receive_data, uint16_t data_le
 }
 
 /**
- * @brief 校验指纹模块接收数据的有效性
- * @param receive_data 接收的数据包缓冲区
- * @param data_length 实际接收的字节数
- * @return esp_err_t 校验结果：ESP_OK=数据是有效的，ESP_FAIL=数据是无效的
+ * @brief Verify the validity of received data from fingerprint module
+ * @param receive_data Received data packet buffer
+ * @param data_length Actual number of received bytes
+ * @return esp_err_t Verification result: ESP_OK = valid data, ESP_FAIL = invalid data
  */
 static esp_err_t verify_received_data(const uint8_t *receive_data, uint16_t data_length)
 {
-    // 基础合法性检查
+    // Basic validity check
     if (receive_data == NULL || data_length < 12)
     {
-        ESP_LOGE(TAG, "校验失败：数据为空或长度不足（最小需9字节，实际%u）", data_length);
+        ESP_LOGE(TAG, "Verification failed: Data is null or length insufficient (min 9 bytes required, actual %u)", data_length);
         return ESP_FAIL;
     }
-    // 验证数据长度
-    uint16_t expectedDataLen = (receive_data[7] << 8) | receive_data[8]; // 数据区长度
+    // Verify data length
+    uint16_t expectedDataLen = (receive_data[7] << 8) | receive_data[8]; // Data field length
     if (expectedDataLen + 9 != data_length)
     {
-        ESP_LOGE(TAG, "校验失败：长度不匹配（期望总长度%u，实际%u）", 9 + expectedDataLen, data_length);
+        ESP_LOGE(TAG, "Verification failed: Length mismatch (expected total length %u, actual %u)", 9 + expectedDataLen, data_length);
         return ESP_FAIL;
     }
-    // 验证帧头
+    // Verify frame header
     if (receive_data[0] != FRAME_HEADER[0] || receive_data[1] != FRAME_HEADER[1])
     {
-        ESP_LOGE(TAG, "校验失败：帧头不匹配（期望%02X%02X，实际%02X%02X）", FRAME_HEADER[0], FRAME_HEADER[1], receive_data[0], receive_data[1]);
+        ESP_LOGE(TAG, "Verification failed: Frame header mismatch (expected %02X%02X, actual %02X%02X)", FRAME_HEADER[0], FRAME_HEADER[1], receive_data[0], receive_data[1]);
         return ESP_FAIL;
     }
-    // 验证设备地址
+    // Verify device address
     for (int i = 2; i < 6; i++)
     {
         if (receive_data[i] != zw111.deviceAddress[i - 2])
         {
-            ESP_LOGE(TAG, "校验失败：设备地址不匹配（期望%02X%02X%02X%02X，实际%02X%02X%02X%02X）",
+            ESP_LOGE(TAG, "Verification failed: Device address mismatch (expected %02X%02X%02X%02X, actual %02X%02X%02X%02X)",
                      zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3],
                      receive_data[2], receive_data[3], receive_data[4], receive_data[5]);
             return ESP_FAIL;
         }
     }
-    // 验证包标识
+    // Verify packet identifier
     if (receive_data[6] != PACKET_RESPONSE)
     {
-        ESP_LOGE(TAG, "校验失败：包标识错误（期望应答包%02X，实际%02X）", PACKET_RESPONSE, receive_data[6]);
+        ESP_LOGE(TAG, "Verification failed: Incorrect packet identifier (expected response packet %02X, actual %02X)", PACKET_RESPONSE, receive_data[6]);
         return ESP_FAIL;
     }
-    // 验证校验和
+    // Verify checksum
     uint16_t receivedChecksum = (receive_data[data_length - 2] << 8) | receive_data[data_length - 1];
     if (calculate_checksum(receive_data, data_length) != receivedChecksum)
     {
-        ESP_LOGE(TAG, "校验失败：校验和不匹配（期望0x%04X，实际0x%04X）", calculate_checksum(receive_data, data_length), receivedChecksum);
+        ESP_LOGE(TAG, "Verification failed: Checksum mismatch (expected 0x%04X, actual 0x%04X)", calculate_checksum(receive_data, data_length), receivedChecksum);
         return ESP_FAIL;
     }
-    ESP_LOGI(TAG, "校验成功：数据有效");
+    ESP_LOGI(TAG, "Verification succeeded: Data is valid");
     return ESP_OK;
 }
 
 /**
- * @brief 指纹模块自动注册函数
- * @param ID 指纹ID号（0-99，超出范围返回失败）
- * @param enrollTimes 录入次数（2-255，超出返回失败）
- * @param ledControl 采图背光灯控制：false=常亮；true=采图成功后熄灭
- * @param preprocess 采图预处理控制：false=不预处理；true=开启预处理
- * @param returnStatus 注册状态返回控制：false=返回状态；true=不返回状态
- * @param allowOverwrite ID覆盖控制：false=不允许覆盖；true=允许覆盖
- * @param allowDuplicate 重复注册控制：false=允许重复；true=禁止重复
- * @param requireRemove 手指离开要求：false=需离开；true=无需离开
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
+ * @brief Auto-enrollment function for fingerprint module
+ * @param ID Fingerprint ID (0-99, returns failure if out of range)
+ * @param enrollTimes Enrollment times (2-255, returns failure if out of range)
+ * @param ledControl Image capture backlight control: false = always on; true = off after successful capture
+ * @param preprocess Image capture preprocessing control: false = no preprocessing; true = enable preprocessing
+ * @param returnStatus Enrollment status return control: false = return status; true = no status return
+ * @param allowOverwrite ID overwrite control: false = not allowed; true = allowed
+ * @param allowDuplicate Duplicate enrollment control: false = allowed; true = prohibited
+ * @param requireRemove Finger removal requirement: false = need to remove; true = no need to remove
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = command sent failed
  */
 static esp_err_t auto_enroll(uint16_t ID, uint8_t enrollTimes, bool ledControl, bool preprocess, bool returnStatus, bool allowOverwrite, bool allowDuplicate, bool requireRemove)
 {
-    // 检查ID有效性
+    // Check ID validity
     if (ID >= 100)
     {
-        ESP_LOGE(TAG, "注册失败：ID超出范围（需0-99，当前%u）", ID);
+        ESP_LOGE(TAG, "Enrollment failed: ID out of range (0-99 required, current %u)", ID);
         return ESP_FAIL;
     }
-    // 检查录入次数有效性
+    // Check enrollment times validity
     if (enrollTimes < 2)
     {
-        ESP_LOGE(TAG, "注册失败：录入次数超出范围（需2-255，当前%u）", enrollTimes);
+        ESP_LOGE(TAG, "Enrollment failed: Enrollment times out of range (2-255 required, current %u)", enrollTimes);
         return ESP_FAIL;
     }
-    // 组装控制参数
+    // Assemble control parameters
     uint16_t param = 0;
-    param |= (ledControl ? 1 << 0 : 0);     // bit0: 背光灯控制
-    param |= (preprocess ? 1 << 1 : 0);     // bit1: 预处理控制
-    param |= (returnStatus ? 1 << 2 : 0);   // bit2: 状态返回控制
-    param |= (allowOverwrite ? 1 << 3 : 0); // bit3: ID覆盖控制
-    param |= (allowDuplicate ? 1 << 4 : 0); // bit4: 重复注册控制
-    param |= (requireRemove ? 1 << 5 : 0);  // bit5: 手指离开控制
-    // 构建数据帧
+    param |= (ledControl ? 1 << 0 : 0);     // bit0: Backlight control
+    param |= (preprocess ? 1 << 1 : 0);     // bit1: Preprocessing control
+    param |= (returnStatus ? 1 << 2 : 0);   // bit2: Status return control
+    param |= (allowOverwrite ? 1 << 3 : 0); // bit3: ID overwrite control
+    param |= (allowDuplicate ? 1 << 4 : 0); // bit4: Duplicate enrollment control
+    param |= (requireRemove ? 1 << 5 : 0);  // bit5: Finger removal control
+    // Construct data frame
     uint8_t frame[17] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x08,                                                                                     // 数据长度(2字节，固定8字节)
-        CMD_AUTO_ENROLL,                                                                                // 指令码(1字节)
-        (uint8_t)(ID >> 8), (uint8_t)ID,                                                                // 指纹ID(2字节，高字节在前)
-        enrollTimes,                                                                                    // 录入次数(1字节)
-        (uint8_t)(param >> 8), (uint8_t)param,                                                          // 控制参数(2字节，高字节在前)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x08,                                                                                     // Data length (2 bytes, fixed 8 bytes)
+        CMD_AUTO_ENROLL,                                                                                // Command code (1 byte)
+        (uint8_t)(ID >> 8), (uint8_t)ID,                                                                // Fingerprint ID (2 bytes, high byte first)
+        enrollTimes,                                                                                    // Enrollment times (1 byte)
+        (uint8_t)(param >> 8), (uint8_t)param,                                                          // Control parameters (2 bytes, high byte first)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[15] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[16] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "发送自动注册指令: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[15] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[16] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "自动注册指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "Auto-enrollment command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 指纹模块自动识别函数
- * @param ID 指纹ID号：具体数值(0-99)=验证指定ID；0xFFFF=验证所有已注册指纹
- * @param scoreLevel 比对分数等级（1-5，等级越高严格度越高，默认建议2）
- * @param ledControl 采图背光灯控制：false=常亮；true=采图成功后熄灭
- * @param preprocess 采图预处理控制：false=不预处理；true=开启预处理
- * @param returnStatus 识别状态返回控制：false=返回状态；true=不返回状态
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
+ * @brief Auto-identification function for fingerprint module
+ * @param ID Fingerprint ID: specific value (0-99) = verify specified ID; 0xFFFF = verify all enrolled fingerprints
+ * @param scoreLevel Matching score level (1-5, higher level = stricter matching, default recommended 2)
+ * @param ledControl Image capture backlight control: false = always on; true = off after successful capture
+ * @param preprocess Image capture preprocessing control: false = no preprocessing; true = enable preprocessing
+ * @param returnStatus Identification status return control: false = return status; true = no status return
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = invalid parameters or command sent failed
  */
 static esp_err_t auto_identify(uint16_t ID, uint8_t scoreLevel, bool ledControl, bool preprocess, bool returnStatus)
 {
     if (scoreLevel < 1 || scoreLevel > 5)
     {
-        ESP_LOGE(TAG, "自动识别失败：分数等级无效（需1-5，当前%u）", scoreLevel);
+        ESP_LOGE(TAG, "Auto-identification failed: Invalid score level (1-5 required, current %u)", scoreLevel);
         return ESP_FAIL;
     }
-    // 组装控制参数
+    // Assemble control parameters
     uint16_t param = 0;
-    param |= (ledControl ? 1 << 0 : 0);   // bit0: 背光灯控制
-    param |= (preprocess ? 1 << 1 : 0);   // bit1: 预处理控制
-    param |= (returnStatus ? 1 << 2 : 0); // bit2: 状态返回控制
-    // 构建数据帧
+    param |= (ledControl ? 1 << 0 : 0);   // bit0: Backlight control
+    param |= (preprocess ? 1 << 1 : 0);   // bit1: Preprocessing control
+    param |= (returnStatus ? 1 << 2 : 0); // bit2: Status return control
+    // Construct data frame
     uint8_t frame[17] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x08,                                                                                     // 数据长度(2字节，固定8字节)
-        CMD_AUTO_IDENTIFY,                                                                              // 指令码(1字节)
-        scoreLevel,                                                                                     // 分数等级(1字节)
-        (uint8_t)(ID >> 8), (uint8_t)ID,                                                                // 指纹ID(2字节，高字节在前)
-        (uint8_t)(param >> 8), (uint8_t)param,                                                          // 控制参数(2字节，高字节在前)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x08,                                                                                     // Data length (2 bytes, fixed 8 bytes)
+        CMD_AUTO_IDENTIFY,                                                                              // Command code (1 byte)
+        scoreLevel,                                                                                     // Score level (1 byte)
+        (uint8_t)(ID >> 8), (uint8_t)ID,                                                                // Fingerprint ID (2 bytes, high byte first)
+        (uint8_t)(param >> 8), (uint8_t)param,                                                          // Control parameters (2 bytes, high byte first)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[15] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[16] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "发送自动识别指令: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[15] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[16] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "自动识别指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "Auto-identification command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 指纹模块LED控制函数（支持呼吸、闪烁、开关等模式）
- * @param functionCode 功能码（1-6，参考BLN_xxx宏定义，如BLN_BREATH=呼吸灯）
- * @param startColor 起始颜色（bit0-蓝,bit1-绿,bit2-红，参考LED_xxx宏定义）
- * @param endColor 结束颜色（仅功能码1-呼吸灯有效，其他模式忽略）
- * @param cycleTimes 循环次数（仅功能码1-呼吸灯/2-闪烁灯有效，0=无限循环）
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
+ * @brief LED control function for fingerprint module (supports breathing, flashing, on/off modes)
+ * @param functionCode Function code (1-6, refer to BLN_xxx macros, e.g., BLN_BREATH = breathing light)
+ * @param startColor Start color (bit0-Blue, bit1-Green, bit2-Red, refer to LED_xxx macros)
+ * @param endColor End color (only valid for function code 1 - breathing light, ignored for other modes)
+ * @param cycleTimes Cycle times (only valid for function code 1-breathing/2-flashing, 0 = infinite cycle)
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = invalid parameters or command sent failed
  */
 static esp_err_t control_led(uint8_t functionCode, uint8_t startColor, uint8_t endColor, uint8_t cycleTimes)
 {
-    // 参数合法性检查
+    // Parameter validity check
     if (functionCode < BLN_BREATH || functionCode > BLN_FADE_OUT)
     {
-        ESP_LOGE(TAG, "LED控制失败：功能码无效（需1-6，当前%u）", functionCode);
+        ESP_LOGE(TAG, "LED control failed: Invalid function code (1-6 required, current %u)", functionCode);
         return ESP_FAIL;
     }
-    // 过滤颜色参数无效位
+    // Filter invalid bits of color parameters
     if ((startColor & 0xF8) != 0)
     {
-        ESP_LOGE(TAG, "LED控制警告：起始颜色仅低3位有效，已过滤为0x%02X\n", startColor & 0x07);
+        ESP_LOGE(TAG, "LED control warning: Only lower 3 bits of start color are valid, filtered to 0x%02X\n", startColor & 0x07);
         startColor &= 0x07;
     }
     if ((endColor & 0xF8) != 0)
     {
-        ESP_LOGE(TAG, "LED控制警告：结束颜色仅低3位有效，已过滤为0x%02X\n", endColor & 0x07);
+        ESP_LOGE(TAG, "LED control warning: Only lower 3 bits of end color are valid, filtered to 0x%02X\n", endColor & 0x07);
         endColor &= 0x07;
     }
-    // 构建数据帧
+    // Construct data frame
     uint8_t frame[16] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x07,                                                                                     // 数据长度(2字节，固定7字节)
-        CMD_CONTROL_BLN,                                                                                // 指令码(1字节)
-        functionCode,                                                                                   // 功能码(1字节)
-        startColor,                                                                                     // 起始颜色(1字节)
-        endColor,                                                                                       // 结束颜色(1字节)
-        cycleTimes,                                                                                     // 循环次数(1字节)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x07,                                                                                     // Data length (2 bytes, fixed 7 bytes)
+        CMD_CONTROL_BLN,                                                                                // Command code (1 byte)
+        functionCode,                                                                                   // Function code (1 byte)
+        startColor,                                                                                     // Start color (1 byte)
+        endColor,                                                                                       // End color (1 byte)
+        cycleTimes,                                                                                     // Cycle times (1 byte)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[14] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[15] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "发送LED控制帧: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[14] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[15] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "LED控制指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "LED control command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 指纹模块LED跑马灯控制函数（七彩循环模式）
- * @param startColor 起始颜色配置（参考LED_xxx宏定义，仅低3位有效）
- * @param timeBit 呼吸周期时间参数（1-100，对应0.1秒-10秒）
- * @param cycleTimes 循环次数（0=无限循环）
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
+ * @brief Colorful running light control function for fingerprint module (7-color cycle mode)
+ * @param startColor Start color configuration (refer to LED_xxx macros, only lower 3 bits valid)
+ * @param timeBit Breathing cycle time parameter (1-100, corresponding to 0.1s-10s)
+ * @param cycleTimes Cycle times (0 = infinite cycle)
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = invalid parameters or command sent failed
  */
 static esp_err_t control_colorful_led(uint8_t startColor, uint8_t timeBit, uint8_t cycleTimes)
 {
-    // 参数合法性检查
+    // Parameter validity check
     if (timeBit < 1 || timeBit > 100)
     {
-        ESP_LOGE(TAG, "跑马灯控制失败：时间参数无效（需1-100，当前%u）", timeBit);
+        ESP_LOGE(TAG, "Colorful light control failed: Invalid time parameter (1-100 required, current %u)", timeBit);
         return ESP_FAIL;
     }
-    // 过滤颜色参数无效位
+    // Filter invalid bits of color parameters
     if ((startColor & 0xF8) != 0)
     {
-        ESP_LOGE(TAG, "跑马灯控制失败：起始颜色仅低3位有效，已过滤为0x%02X\n", startColor & 0x07);
+        ESP_LOGE(TAG, "Colorful light control failed: Only lower 3 bits of start color are valid, filtered to 0x%02X\n", startColor & 0x07);
         startColor &= 0x07;
     }
-    // 构建数据帧
+    // Construct data frame
     uint8_t frame[17] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x08,                                                                                     // 数据长度(2字节，固定8字节)
-        CMD_CONTROL_BLN,                                                                                // 指令码(1字节)
-        BLN_COLORFUL,                                                                                   // 功能码(1字节，七彩模式)
-        startColor,                                                                                     // 起始颜色(1字节)
-        0x11,                                                                                           // 占空比固定值
-        cycleTimes,                                                                                     // 循环次数(1字节)
-        timeBit,                                                                                        // 周期时间参数(1字节)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x08,                                                                                     // Data length (2 bytes, fixed 8 bytes)
+        CMD_CONTROL_BLN,                                                                                // Command code (1 byte)
+        BLN_COLORFUL,                                                                                   // Function code (1 byte, colorful mode)
+        startColor,                                                                                     // Start color (1 byte)
+        0x11,                                                                                           // Fixed duty cycle value
+        cycleTimes,                                                                                     // Cycle times (1 byte)
+        timeBit,                                                                                        // Cycle time parameter (1 byte)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[15] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[16] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "发送跑马灯控制帧: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[15] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[16] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "跑马灯控制指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "Colorful light control command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 删除指定数量的指纹（从指定ID开始连续删除）
- * @param ID 起始指纹ID（0-99，超出范围返回失败）
- * @param count 删除数量（1-100，需确保不超出ID范围）
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
+ * @brief Delete specified number of fingerprints (delete continuously from specified ID)
+ * @param ID Start fingerprint ID (0-99, returns failure if out of range)
+ * @param count Number of fingerprints to delete (1-100, must not exceed ID range)
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = invalid parameters or command sent failed
  */
 static esp_err_t delete_char(uint16_t ID, uint16_t count)
 {
-    // 参数合法性检查
+    // Parameter validity check
     if (ID >= 100)
     {
-        // ID超出范围
-        ESP_LOGE(TAG, "删除失败：起始ID超出范围（需0-99，当前%u）", ID);
+        // ID out of range
+        ESP_LOGE(TAG, "Deletion failed: Start ID out of range (0-99 required, current %u)", ID);
         return ESP_FAIL;
     }
     if (count == 0 || count > 100 || (ID + count) > 100)
     {
-        ESP_LOGE(TAG, "删除失败：数量无效（需1-100且不超出ID范围，当前数量%u）", count);
-        // 数量无效或超出ID范围
+        ESP_LOGE(TAG, "Deletion failed: Invalid count (1-100 required and no exceed ID range, current count %u)", count);
+        // Invalid count or exceed ID range
         return ESP_FAIL;
     }
-    // 构建数据帧
+    // Construct data frame
     uint8_t frame[16] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x07,                                                                                     // 数据长度(2字节，固定7字节)
-        CMD_DELET_CHAR,                                                                                 // 指令码(1字节)
-        (uint8_t)(ID >> 8), (uint8_t)ID,                                                                // 起始ID(2字节，高字节在前)
-        (uint8_t)(count >> 8), (uint8_t)count,                                                          // 删除数量(2字节，高字节在前)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x07,                                                                                     // Data length (2 bytes, fixed 7 bytes)
+        CMD_DELET_CHAR,                                                                                 // Command code (1 byte)
+        (uint8_t)(ID >> 8), (uint8_t)ID,                                                                // Start ID (2 bytes, high byte first)
+        (uint8_t)(count >> 8), (uint8_t)count,                                                          // Delete count (2 bytes, high byte first)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[14] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[15] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "发送删除指纹帧: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[14] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[15] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "删除指纹指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "Fingerprint deletion command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 清空模块中所有已注册的指纹
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
+ * @brief Clear all enrolled fingerprints in the module
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = command sent failed
  */
 static esp_err_t empty()
 {
-    // 构建数据帧
+    // Construct data frame
     uint8_t frame[12] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x03,                                                                                     // 数据长度(2字节)
-        CMD_EMPTY,                                                                                      // 指令码(1字节)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x03,                                                                                     // Data length (2 bytes)
+        CMD_EMPTY,                                                                                      // Command code (1 byte)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[10] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[11] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "发送清空指纹帧: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[10] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[11] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "清空指纹指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "Clear all fingerprints command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 取消模块当前正在执行的操作（如注册、识别等）
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
+ * @brief Cancel the current operation of the module (e.g., enrollment, identification)
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = command sent failed
  */
 static esp_err_t cancel()
 {
-    // 构建数据帧
+    // Construct data frame
     uint8_t frame[12] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x03,                                                                                     // 数据长度(2字节)
-        CMD_CANCEL,                                                                                     // 指令码(1字节)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x03,                                                                                     // Data length (2 bytes)
+        CMD_CANCEL,                                                                                     // Command code (1 byte)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[10] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[11] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "发送取消操作帧: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[10] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[11] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "取消操作指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "Cancel operation command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 控制模块进入休眠模式
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=命令发送失败
+ * @brief Control the module to enter sleep mode
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = command sent failed
  */
 static esp_err_t sleep()
 {
-    // 构建数据帧
+    // Construct data frame
     uint8_t frame[12] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x03,                                                                                     // 数据长度(2字节)
-        CMD_SLEEP,                                                                                      // 指令码(1字节)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x03,                                                                                     // Data length (2 bytes)
+        CMD_SLEEP,                                                                                      // Command code (1 byte)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[10] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[11] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "发送休眠指令帧: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[10] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[11] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "休眠指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "Sleep command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 读取模块中的指纹索引表（获取已注册指纹ID）
- * @param page 页码（0-4，每页对应20枚指纹，共100枚）
- * @return esp_err_t 操作结果：ESP_OK=命令发送成功，ESP_FAIL=参数无效或命令发送失败
+ * @brief Read fingerprint index table from the module (get enrolled fingerprint IDs)
+ * @param page Page number (0-4, each page corresponds to 20 fingerprints, total 100)
+ * @return esp_err_t Operation result: ESP_OK = command sent successfully, ESP_FAIL = invalid parameters or command sent failed
  */
 static esp_err_t read_index_table(uint8_t page)
 {
-    // 参数合法性检查
+    // Parameter validity check
     if (page > 4)
     {
-        ESP_LOGE(TAG, "页码无效（需0-4，当前%u）", page);
+        ESP_LOGE(TAG, "Invalid page number (0-4 required, current %u)", page);
         return ESP_FAIL;
     }
-    // 构建数据帧
+    // Construct data frame
     uint8_t frame[13] = {
-        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // 帧头(2字节)
-        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // 设备地址(4字节)
-        PACKET_CMD,                                                                                     // 包标识(1字节)
-        0x00, 0x04,                                                                                     // 数据长度(2字节，固定4字节)
-        CMD_READ_INDEX_TABLE,                                                                           // 指令码(1字节)
-        page,                                                                                           // 页码(1字节)
-        0x00, 0x00                                                                                      // 校验和(2字节，待计算)
+        FRAME_HEADER[0], FRAME_HEADER[1],                                                               // Frame header (2 bytes)
+        zw111.deviceAddress[0], zw111.deviceAddress[1], zw111.deviceAddress[2], zw111.deviceAddress[3], // Device address (4 bytes)
+        PACKET_CMD,                                                                                     // Packet identifier (1 byte)
+        0x00, 0x04,                                                                                     // Data length (2 bytes, fixed 4 bytes)
+        CMD_READ_INDEX_TABLE,                                                                           // Command code (1 byte)
+        page,                                                                                           // Page number (1 byte)
+        0x00, 0x00                                                                                      // Checksum (2 bytes, to be calculated)
     };
-    // 计算并填充校验和
+    // Calculate and fill checksum
     uint16_t checksum = calculate_checksum(frame, sizeof(frame));
-    frame[11] = (uint8_t)(checksum >> 8);   // 校验和高字节
-    frame[12] = (uint8_t)(checksum & 0xFF); // 校验和低字节
-    // 调试输出帧信息
-    ESP_LOGI(TAG, "读取索引表: ");
-    ESP_LOG_BUFFER_HEX(TAG, frame, sizeof(frame));
-    // UART发送命令
+    frame[11] = (uint8_t)(checksum >> 8);   // High byte of checksum
+    frame[12] = (uint8_t)(checksum & 0xFF); // Low byte of checksum
+
+    // Send command via UART
     int len = uart_write_bytes(EX_UART_NUM, (const char *)frame, sizeof(frame));
     if (len == sizeof(frame))
     {
-        // 发送成功
-        ESP_LOGI(TAG, "读取索引表指令发送成功");
+        // Send succeeded
+        ESP_LOGI(TAG, "Read index table command sent successfully");
         return ESP_OK;
     }
     else
     {
-        // 发送失败
-        ESP_LOGE(TAG, "发送失败，实际发送字节数: %d", len);
+        // Send failed
+        ESP_LOGE(TAG, "Sending failed, actual bytes sent: %d", len);
         return ESP_FAIL;
     }
 }
 
 /**
- * @brief 解析读索引表命令的返回数据，提取已注册指纹ID
- * @param receive_data 接收的数据包缓冲区
- * @param data_length 实际接收的字节数（需显式传入）
- * @return esp_err_t 解析结果：ESP_OK=解析成功，ESP_FAIL=数据无效或解析失败
+ * @brief Parse the return data of read index table command and extract enrolled fingerprint IDs
+ * @param receive_data Received data packet buffer
+ * @param data_length Actual number of received bytes (must be explicitly passed)
+ * @return esp_err_t Parsing result: ESP_OK = parsing succeeded, ESP_FAIL = invalid data or parsing failed
  */
 static esp_err_t fingerprint_parse_frame(const uint8_t *receive_data, uint16_t data_length)
 {
-    // 初始化指纹ID数组（0xFF表示未使用）
+    // Initialize fingerprint ID array (0xFF means unused)
     memset(zw111.fingerIDArray, 0xFF, sizeof(zw111.fingerIDArray));
     zw111.fingerNumber = 0;
-    // 掩码数组（用于检测每个bit是否置位）
+    // Mask array (used to detect if each bit is set)
     uint8_t mask[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
-    uint8_t tempCount = 0; // 临时计数变量
-    // 解析数据区（索引表数据从第10字节开始，共13字节，对应104个bit，实际有效100个）
-    for (uint8_t i = 10; i <= 22; i++) // i=10到22共13字节
+    uint8_t tempCount = 0; // Temporary count variable
+    // Parse data field (index table data starts from byte 10, 13 bytes total, corresponding to 104 bits, 100 valid bits actually)
+    for (uint8_t i = 10; i <= 22; i++) // i=10 to 22 (13 bytes total)
     {
         uint8_t byteData = receive_data[i];
         if (byteData == 0)
-            continue; // 跳过无指纹的字节
-        // 检测当前字节的每个bit（对应8个指纹ID）
+            continue; // Skip bytes with no fingerprints
+        // Detect each bit of current byte (corresponding to 8 fingerprint IDs)
         for (uint8_t j = 0; j < 8; j++)
         {
             if (byteData & mask[j])
             {
-                // 计算指纹ID：(字节偏移)×8 + bit偏移
+                // Calculate fingerprint ID: (byte offset)×8 + bit offset
                 uint8_t fingerID = (i - 10) * 8 + j;
-                if (fingerID < 100) // 仅保留有效ID（0-99）
+                if (fingerID < 100) // Only keep valid IDs (0-99)
                 {
                     zw111.fingerIDArray[tempCount] = fingerID;
                     tempCount++;
                     if (tempCount >= 100)
-                        break; // 达到最大容量则停止
+                        break; // Stop when maximum capacity is reached
                 }
             }
         }
         if (tempCount >= 100)
-            break; // 达到最大容量则停止
+            break; // Stop when maximum capacity is reached
     }
-    // 更新有效指纹数量
+    // Update valid fingerprint count
     zw111.fingerNumber = tempCount;
     if (zw111.fingerNumber > 0)
     {
-        ESP_LOGI(TAG, "检测到%u个已注册指纹ID: ", zw111.fingerNumber);
+        ESP_LOGI(TAG, "Detected %u enrolled fingerprint IDs: ", zw111.fingerNumber);
         for (size_t i = 0; i < zw111.fingerNumber; i++)
         {
             ESP_LOGI(TAG, "%u ", zw111.fingerIDArray[i]);
@@ -595,124 +577,124 @@ static esp_err_t fingerprint_parse_frame(const uint8_t *receive_data, uint16_t d
     }
     else
     {
-        ESP_LOGI(TAG, "未检测到任何已注册指纹");
+        ESP_LOGI(TAG, "No enrolled fingerprints detected");
     }
     return ESP_OK;
 }
 
 /**
- * 在指纹列表中查找最小未使用序号并返回其序号
- * @return 最小未使用的指纹ID，无可用ID时返回255
+ * Find the smallest unused ID in the fingerprint list and return it
+ * @return Smallest unused fingerprint ID, returns 255 if no available ID
  */
 uint8_t get_mini_unused_id()
 {
-    // 特殊情况：没有任何指纹，直接返回0
+    // Special case: no fingerprints exist, return 0 directly
     if (zw111.fingerNumber == 0)
     {
         return 0;
     }
-    // 检查第一个ID是否为0，如果不是，说明0未被使用
+    // Check if the first ID is 0, if not, 0 is unused
     if (zw111.fingerIDArray[0] > 0)
     {
         return 0;
     }
-    // 遍历已排序的ID数组，查找连续序列中的空缺
+    // Traverse sorted ID array to find gaps in continuous sequence
     for (uint8_t i = 0; i < zw111.fingerNumber - 1; i++)
     {
-        // 当前ID和下一个ID之间存在空缺
+        // There is a gap between current ID and next ID
         if (zw111.fingerIDArray[i + 1] > zw111.fingerIDArray[i] + 1)
         {
             return zw111.fingerIDArray[i] + 1;
         }
     }
-    // 所有已有ID是连续的，返回最后一个ID的下一个值
+    // All existing IDs are continuous, return next value of last ID
     uint8_t last_id = zw111.fingerIDArray[zw111.fingerNumber - 1];
-    if (last_id + 1 < 100) // 确保不超过最大支持的ID范围
+    if (last_id + 1 < 100) // Ensure not exceed maximum supported ID range
     {
         return last_id + 1;
     }
-    // 所有可能的ID都已使用
+    // All possible IDs are used
     return 255;
 }
 
 /**
- * 插入新注册的指纹ID到数组中，保持数组有序性
- * @param new_id 要插入的新指纹ID（应通过get_mini_unused_id()获取）
- * @return 成功插入返回ESP_OK，失败返回ESP_FAIL
+ * Insert newly enrolled fingerprint ID into array while maintaining array order
+ * @param new_id New fingerprint ID to insert (should be obtained via get_mini_unused_id())
+ * @return ESP_OK for successful insertion, ESP_FAIL for failure
  */
 static esp_err_t insert_fingerprint_id(uint8_t new_id)
 {
-    // 检查ID有效性
+    // Check ID validity
     if (new_id >= 100)
     {
-        return ESP_FAIL; // ID无效
+        return ESP_FAIL; // Invalid ID
     }
-    // 检查数组是否已满
+    // Check if array is full
     if (zw111.fingerNumber >= 100)
     {
-        return ESP_FAIL; // 达到最大容量，无法插入
+        return ESP_FAIL; // Maximum capacity reached, cannot insert
     }
-    // 找到插入位置
+    // Find insertion position
     uint8_t insert_pos = 0;
     while (insert_pos < zw111.fingerNumber &&
            zw111.fingerIDArray[insert_pos] < new_id)
     {
         insert_pos++;
     }
-    // 移动元素为新ID腾出位置
+    // Move elements to make space for new ID
     for (uint8_t i = zw111.fingerNumber; i > insert_pos; i--)
     {
         zw111.fingerIDArray[i] = zw111.fingerIDArray[i - 1];
     }
-    // 插入新ID
+    // Insert new ID
     zw111.fingerIDArray[insert_pos] = new_id;
-    // 更新指纹数量
+    // Update fingerprint count
     zw111.fingerNumber++;
-    ESP_LOGI(TAG, "插入指纹ID%u成功", zw111.fingerIDArray[insert_pos]);
-    return ESP_OK; // 插入成功
+    ESP_LOGI(TAG, "Insert fingerprint ID %u succeeded", zw111.fingerIDArray[insert_pos]);
+    return ESP_OK; // Insertion succeeded
 }
 
 /**
- * @brief 模块取消当前的操作并执行某条指令
- * @note 该函数会取消当前正在进行的指纹操作（如注册、识别等），并将状态设置为取消状态
+ * @brief Cancel current operation of the module and execute a specific command
+ * @note This function will cancel the current fingerprint operation (e.g., enrollment, identification) and set the state to canceled
  * @return void
  */
 void cancel_current_operation_and_execute_command()
 {
-    zw111.state = 0x0A; // 切换为取消状态
-    // 发送取消命令
+    zw111.state = 0x0A; // Switch to cancel state
+    // Send cancel command
     if (cancel() == ESP_OK)
     {
-        ESP_LOGI(TAG, "准备取消当前操作，模块状态已切换为取消状态");
+        ESP_LOGI(TAG, "Preparing to cancel current operation, module state switched to cancel state");
     }
     else
     {
-        // 取消操作失败
-        ESP_LOGE(TAG, "取消当前操作失败");
+        // Cancel operation failed
+        ESP_LOGE(TAG, "Failed to cancel current operation");
     }
 }
 
 /**
- * @brief 初始化指纹模块UART通信
- * @return esp_err_t ESP_OK=初始化成功，其他=失败
+ * @brief Initialize UART communication for fingerprint module
+ * @return esp_err_t ESP_OK = initialization succeeded, others = failed
  */
 static esp_err_t fingerprint_initialization_uart()
 {
     esp_err_t ret = ESP_OK;
-    // 检查是否已安装
+    // Check if driver is already installed
     if (uart_is_driver_installed(EX_UART_NUM))
     {
-        ESP_LOGW(TAG, "UART驱动已安装，无需重复安装");
+        ESP_LOGW(TAG, "UART driver already installed, no need to reinstall");
         return ESP_OK;
     }
-    // 安装UART驱动
+    // Install UART driver
     ret = uart_driver_install(EX_UART_NUM, 1024, 1024, 5, &uart2_queue, 0);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "UART驱动安装失败: 0x%x", ret);
+        ESP_LOGE(TAG, "UART driver installation failed: 0x%x", ret);
         return ret;
     }
-    // 配置UART参数
+    // Configure UART parameters
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -724,112 +706,112 @@ static esp_err_t fingerprint_initialization_uart()
     ret = uart_param_config(EX_UART_NUM, &uart_config);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "UART参数配置失败: 0x%x", ret);
+        ESP_LOGE(TAG, "UART parameter configuration failed: 0x%x", ret);
         uart_driver_delete(EX_UART_NUM);
         return ret;
     }
-    // 设置UART引脚
+    // Set UART pins
     ret = uart_set_pin(EX_UART_NUM, FINGERPRINT_RX_PIN, FINGERPRINT_TX_PIN,
                        UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "UART引脚配置失败: 0x%x", ret);
+        ESP_LOGE(TAG, "UART pin configuration failed: 0x%x", ret);
         uart_driver_delete(EX_UART_NUM);
         return ret;
     }
-    // 配置模式检测
+    // Configure pattern detection
     ret = uart_enable_pattern_det_baud_intr(EX_UART_NUM, 0x55, 1, 9, 20, 0);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "模式检测配置失败: 0x%x", ret);
+        ESP_LOGE(TAG, "Pattern detection configuration failed: 0x%x", ret);
         uart_driver_delete(EX_UART_NUM);
         return ret;
     }
-    // 重置模式队列
+    // Reset pattern queue
     ret = uart_pattern_queue_reset(EX_UART_NUM, 5);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "模式队列重置失败: 0x%x", ret);
+        ESP_LOGE(TAG, "Pattern queue reset failed: 0x%x", ret);
         uart_driver_delete(EX_UART_NUM);
         return ret;
     }
-    ESP_LOGI(TAG, "UART初始化成功");
+    ESP_LOGI(TAG, "UART initialization succeeded");
     return ESP_OK;
 }
 
 /**
- * @brief 删除指纹模块UART通信
- * @return esp_err_t ESP_OK=删除成功，ESP_FAIL=删除失败
+ * @brief Deinitialize UART communication for fingerprint module
+ * @return esp_err_t ESP_OK = deinitialization succeeded, ESP_FAIL = deinitialization failed
  */
 static esp_err_t fingerprint_deinitialization_uart()
 {
     if (!uart_is_driver_installed(EX_UART_NUM))
     {
-        ESP_LOGE(TAG, "UART驱动未安装，无法删除");
+        ESP_LOGE(TAG, "UART driver not installed, cannot delete");
         return ESP_FAIL;
     }
-    // 等待TX数据发送完成
-    esp_err_t ret = uart_wait_tx_done(EX_UART_NUM, 100); // 超时100ticks
+    // Wait for TX data transmission completion
+    esp_err_t ret = uart_wait_tx_done(EX_UART_NUM, 100); // Timeout 100 ticks
     if (ret == ESP_ERR_TIMEOUT)
     {
-        ESP_LOGW(TAG, "TX缓冲区数据未完全发送，强制删除");
+        ESP_LOGW(TAG, "TX buffer data not fully sent, force delete");
     }
-    // 清空RX缓冲区
+    // Flush RX buffer
     uart_flush_input(EX_UART_NUM);
-    // 删除事件队列
+    // Delete event queue
     if (uart2_queue != NULL)
     {
         vQueueDelete(uart2_queue);
         uart2_queue = NULL;
     }
-    // 删除UART驱动
+    // Delete UART driver
     ret = uart_driver_delete(EX_UART_NUM);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "UART驱动删除失败: 0x%x", ret);
+        ESP_LOGE(TAG, "UART driver deletion failed: 0x%x", ret);
         return ret;
     }
-    ESP_LOGI(TAG, "UART驱动已删除");
+    ESP_LOGI(TAG, "UART driver deleted");
     return ESP_OK;
 }
 
 /**
- * @brief 打开指纹模块
- * @note 该函数会给指纹模块供电，并设置状态为已供电
+ * @brief Turn on fingerprint module
+ * @note This function will power on the fingerprint module and set the state to powered on
  * @return void
  */
 void turn_on_fingerprint()
 {
-    gpio_set_level(FINGERPRINT_CTL_PIN, 0); // 给指纹模块供电
-    fingerprint_initialization_uart();      // 初始化UART通信
+    gpio_set_level(FINGERPRINT_CTL_PIN, 0); // Power on fingerprint module
+    fingerprint_initialization_uart();      // Initialize UART communication
     xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
     zw111.power = true;
-    ESP_LOGI(TAG, "指纹模块已供电");
+    ESP_LOGI(TAG, "Fingerprint module powered on");
 }
 
 /**
- * @brief 模块准备关闭
- * @note 该函数会准备关闭指纹模块，发送休眠命令并设置状态为休眠
+ * @brief Prepare to turn off the module
+ * @note This function will prepare to turn off the fingerprint module, send sleep command and set state to sleep
  * @return void
  */
 void prepare_turn_off_fingerprint()
 {
-    zw111.state = 0x0B; // 切换为休眠状态
-    // 发送休眠命令
+    zw111.state = 0x0B; // Switch to sleep state
+    // Send sleep command
     if (sleep() == ESP_OK)
     {
-        ESP_LOGI(TAG, "准备休眠，模块状态已切换为休眠状态");
+        ESP_LOGI(TAG, "Preparing to sleep, module state switched to sleep state");
     }
     else
     {
-        // 休眠操作失败
-        ESP_LOGE(TAG, "休眠当前操作失败");
+        // Sleep operation failed
+        ESP_LOGE(TAG, "Failed to sleep current operation");
     }
 }
 
 /**
- * @brief 触摸中断服务程序
- * @param arg 中断参数（传入GPIO编号）
+ * @brief Touch interrupt service routine
+ * @param arg Interrupt parameter (GPIO number passed in)
  * @return void
  */
 static void IRAM_ATTR gpio_isr_handler(void *arg)
@@ -837,23 +819,23 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
     uint32_t gpio_num = (uint32_t)arg;
     if (gpio_num == FINGERPRINT_INT_PIN && gpio_get_level(FINGERPRINT_INT_PIN) == 1)
     {
-        ESP_EARLY_LOGI(TAG, "指纹模块中断触发, gpio_num=%u", gpio_num);
+        ESP_EARLY_LOGI(TAG, "Fingerprint module interrupt triggered, gpio_num=%u", gpio_num);
         xSemaphoreGiveFromISR(fingerprint_semaphore, NULL);
     }
 }
 
 /**
- * @brief 初始化指纹模块UART通信
- * @return esp_err_t ESP_OK=初始化成功，ESP_FAIL=数据无效或初始化失败
+ * @brief Initialize fingerprint module
+ * @return esp_err_t ESP_OK = initialization succeeded, ESP_FAIL = invalid data or initialization failed
  */
 esp_err_t fingerprint_initialization()
 {
-    // 初始化UART通信
+    // Initialize UART communication
     if (fingerprint_initialization_uart() != ESP_OK)
     {
         return ESP_FAIL;
     }
-    // 初始化指纹模块数据结构
+    // Initialize fingerprint module data structure
     zw111.deviceAddress[0] = 0xFF;
     zw111.deviceAddress[1] = 0xFF;
     zw111.deviceAddress[2] = 0xFF;
@@ -873,7 +855,7 @@ esp_err_t fingerprint_initialization()
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&fingerprint_ctl_gpio_config);
 
-    fingerprint_semaphore = xSemaphoreCreateBinary(); // 仅用于触摸之后开启模块
+    fingerprint_semaphore = xSemaphoreCreateBinary(); // Only used to activate the module after touch detection
     if (g_gpio_isr_service_installed == false)
     {
         gpio_install_isr_service(0);
@@ -881,7 +863,7 @@ esp_err_t fingerprint_initialization()
     }
     gpio_isr_handler_add(FINGERPRINT_INT_PIN, gpio_isr_handler, (void *)FINGERPRINT_INT_PIN);
     ESP_LOGI(TAG, "zw111 interrupt gpio configured");
-    // Create a task to handler UART event from ISR
+    // Create a task to handle UART event from ISR
     xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
     ESP_LOGI(TAG, "uart task created");
     xTaskCreate(fingerprint_task, "fingerprint_task", 8192, NULL, 10, NULL);
@@ -892,60 +874,60 @@ esp_err_t fingerprint_initialization()
 }
 
 /**
- * @brief 指纹任务
- * @param pvParameters 任务参数（未使用）
+ * @brief Fingerprint task
+ * @param pvParameters Task parameters (unused)
  * @return void
  */
 void fingerprint_task(void *pvParameters)
 {
     while (1)
     {
-        // 等待信号量被释放
+        // Wait for semaphore to be released
         if (xSemaphoreTake(fingerprint_semaphore, portMAX_DELAY) == pdTRUE)
         {
-            // 信号量被释放，表示指纹模块已准备就绪
-            ESP_LOGI(TAG, "指纹模块已准备就绪，开始处理任务");
-            // 打印模块当前状态
-            ESP_LOGI(TAG, "指纹模块供电状态: %s", zw111.power ? "已供电" : "未供电");
-            ESP_LOGI(TAG, "指纹模块状态: %s",
-                     zw111.state == 0x00   ? "初始状态"
-                     : zw111.state == 0x01 ? "读索引表状态"
-                     : zw111.state == 0x02 ? "注册指纹状态"
-                     : zw111.state == 0x03 ? "删除指纹状态"
-                     : zw111.state == 0x04 ? "验证指纹状态"
-                     : zw111.state == 0x0A ? "取消状态"
-                     : zw111.state == 0x0B ? "休眠状态"
-                                           : "未知状态");
-            ESP_LOGI(TAG, "指纹模块设备地址: %02X:%02X:%02X:%02X",
+            // Semaphore released, indicating fingerprint module is ready
+            ESP_LOGI(TAG, "Fingerprint module is ready, start processing tasks");
+            // Print current module state
+            ESP_LOGI(TAG, "Fingerprint module power state: %s", zw111.power ? "Powered on" : "Powered off");
+            ESP_LOGI(TAG, "Fingerprint module state: %s",
+                     zw111.state == 0x00   ? "Initial state"
+                     : zw111.state == 0x01 ? "Read index table state"
+                     : zw111.state == 0x02 ? "Enroll fingerprint state"
+                     : zw111.state == 0x03 ? "Delete fingerprint state"
+                     : zw111.state == 0x04 ? "Verify fingerprint state"
+                     : zw111.state == 0x0A ? "Cancel state"
+                     : zw111.state == 0x0B ? "Sleep state"
+                                           : "Unknown state");
+            ESP_LOGI(TAG, "Fingerprint module device address: %02X:%02X:%02X:%02X",
                      zw111.deviceAddress[0], zw111.deviceAddress[1],
                      zw111.deviceAddress[2], zw111.deviceAddress[3]);
-            ESP_LOGI(TAG, "指纹模块已注册指纹数量: %u", zw111.fingerNumber);
-            ESP_LOGI(TAG, "指纹模块已注册指纹ID: ");
+            ESP_LOGI(TAG, "Number of enrolled fingerprints in module: %u", zw111.fingerNumber);
+            ESP_LOGI(TAG, "Enrolled fingerprint IDs in module: ");
             for (size_t i = 0; i < zw111.fingerNumber; i++)
             {
                 ESP_LOGI(TAG, "%u ", zw111.fingerIDArray[i]);
             }
-            // 启动指纹验证
-            if (zw111.power == false) // 断电状态
+            // Start fingerprint verification
+            if (zw111.power == false) // Power off state
             {
-                ESP_LOGI(TAG, "当前状态为断电状态，准备验证指纹");
-                zw111.state = 0x04;    // 切换为验证指纹状态
-                turn_on_fingerprint(); // 打开指纹模块供电
+                ESP_LOGI(TAG, "Current state is power off, preparing to verify fingerprint");
+                zw111.state = 0x04;    // Switch to verify fingerprint state
+                turn_on_fingerprint(); // Power on fingerprint module
             }
-            // 处理指纹模块异常状态
-            else if (zw111.power == true) // 供电状态
+            // Handle abnormal module state
+            else if (zw111.power == true) // Power on state
             {
-                ESP_LOGE(TAG, "当前状态为异常状态，准备关闭指纹模块");
-                cancel_current_operation_and_execute_command(); // 取消当前操作
-                prepare_turn_off_fingerprint();                 // 准备关闭指纹模块
+                ESP_LOGE(TAG, "Current state is abnormal, preparing to turn off fingerprint module");
+                cancel_current_operation_and_execute_command(); // Cancel current operation
+                prepare_turn_off_fingerprint();                 // Prepare to turn off fingerprint module
             }
         }
     }
 }
 
 /**
- * @brief UART事件处理任务
- * @param pvParameters 任务参数（未使用）
+ * @brief UART event handling task
+ * @param pvParameters Task parameters (unused)
  * @return void
  */
 void uart_task(void *pvParameters)
@@ -961,105 +943,105 @@ void uart_task(void *pvParameters)
             switch (event.type)
             {
             case UART_DATA:
-                if (zw111.state == 0X0B && event.size == 12) // 休眠状态
+                if (zw111.state == 0X0B && event.size == 12) // Sleep state
                 {
-                    // 先接受数据
+                    // Receive data first
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-                    // 再验证收到的数据是否有效
+                    // Verify if received data is valid
                     if (verify_received_data(dtmp, event.size) != ESP_OK)
                     {
-                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
-                        break; // 丢弃无效数据
+                        ESP_LOGE(TAG, "Received invalid data, discarded");
+                        break; // Discard invalid data
                     }
-                    if (dtmp[9] == 0x00) // 确认码=00H 表示休眠设置成功
+                    if (dtmp[9] == 0x00) // Confirm code = 00H means sleep setting succeeded
                     {
-                        fingerprint_deinitialization_uart();    // 删除UART驱动
-                        zw111.power = false;                    // 设置供电状态为false
-                        zw111.state = 0X00;                     // 切换为初始状态
-                        gpio_set_level(FINGERPRINT_CTL_PIN, 1); // 给指纹模块断电
-                        ESP_LOGI(TAG, "指纹模块已断电，状态已重置为初始状态");
-                        vTaskDelete(NULL); // 删除当前任务
+                        fingerprint_deinitialization_uart();    // Delete UART driver
+                        zw111.power = false;                    // Set power state to false
+                        zw111.state = 0X00;                     // Switch to initial state
+                        gpio_set_level(FINGERPRINT_CTL_PIN, 1); // Power off fingerprint module
+                        ESP_LOGI(TAG, "Fingerprint module powered off, state reset to initial state");
+                        vTaskDelete(NULL); // Delete current task
                     }
                 }
-                else if (zw111.state == 0X0A && event.size == 12) // 取消状态
+                else if (zw111.state == 0X0A && event.size == 12) // Cancel state
                 {
-                    // 先接受数据
+                    // Receive data first
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-                    // 再验证收到的数据是否有效
+                    // Verify if received data is valid
                     if (verify_received_data(dtmp, event.size) != ESP_OK)
                     {
-                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
-                        break; // 丢弃无效数据
+                        ESP_LOGE(TAG, "Received invalid data, discarded");
+                        break; // Discard invalid data
                     }
-                    if (dtmp[9] == 0x00) // 确认码=00H 表示取消操作成功
+                    if (dtmp[9] == 0x00) // Confirm code = 00H means cancel operation succeeded
                     {
-                        ESP_LOGI(TAG, "取消操作成功，准备执行其他命令");
+                        ESP_LOGI(TAG, "Cancel operation succeeded, preparing to execute other commands");
                         if (g_ready_add_fingerprint == true)
                         {
-                            zw111.state = 0x02;              // 设置状态为注册指纹状态
-                            g_ready_add_fingerprint = false; // 重置添加指纹标志
-                            // 发送注册指纹命令
+                            zw111.state = 0x02;              // Set state to enroll fingerprint state
+                            g_ready_add_fingerprint = false; // Reset add fingerprint flag
+                            // Send enroll fingerprint command
                             if (auto_enroll(get_mini_unused_id(), 5, false, false, false, false, true, false) != ESP_OK)
                             {
-                                ESP_LOGE(TAG, "注册指纹命令发送失败");
+                                ESP_LOGE(TAG, "Failed to send enroll fingerprint command");
                                 prepare_turn_off_fingerprint();
                             }
                         }
                         else if (g_cancel_add_fingerprint == true)
                         {
-                            g_cancel_add_fingerprint = false; // 重置取消添加指纹标志
-                            prepare_turn_off_fingerprint();   // 准备关闭指纹模块
+                            g_cancel_add_fingerprint = false; // Reset cancel add fingerprint flag
+                            prepare_turn_off_fingerprint();   // Prepare to turn off fingerprint module
                         }
                         else if (g_ready_delete_fingerprint == true && g_ready_delete_all_fingerprint == false)
                         {
-                            zw111.state = 0x03; // 设置状态为删除指纹状态
-                            // 发送删除指纹命令
+                            zw111.state = 0x03; // Set state to delete fingerprint state
+                            // Send delete fingerprint command
                             if (delete_char(g_deleteFingerprintID, 1) != ESP_OK)
                             {
-                                ESP_LOGE(TAG, "删除指纹命令发送失败");
-                                prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                                ESP_LOGE(TAG, "Failed to send delete fingerprint command");
+                                prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                             }
                         }
                         else if (g_ready_delete_all_fingerprint == true && g_ready_delete_fingerprint == false)
                         {
-                            zw111.state = 0x03; // 设置状态为删除指纹状态
-                            // 发送删除所有指纹命令
+                            zw111.state = 0x03; // Set state to delete fingerprint state
+                            // Send delete all fingerprints command
                             if (empty() != ESP_OK)
                             {
-                                ESP_LOGE(TAG, "删除所有指纹命令发送失败");
-                                prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                                ESP_LOGE(TAG, "Failed to send delete all fingerprints command");
+                                prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                             }
                         }
                         else
                         {
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                 }
-                else if (zw111.state == 0X04 && event.size == 17) // 验证指纹状态
+                else if (zw111.state == 0X04 && event.size == 17) // Verify fingerprint state
                 {
-                    // 先接受数据
+                    // Receive data first
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-                    // 再验证收到的数据是否有效
+                    // Verify if received data is valid
                     if (verify_received_data(dtmp, event.size) != ESP_OK)
                     {
-                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
-                        break; // 丢弃无效数据
+                        ESP_LOGE(TAG, "Received invalid data, discarded");
+                        break; // Discard invalid data
                     }
                     if (dtmp[10] == 0x00 && dtmp[9] == 0x00)
                     {
-                        ESP_LOGI(TAG, "验证指纹-命令执行成功，等待图像采集");
+                        ESP_LOGI(TAG, "Verify fingerprint - Command executed successfully, waiting for image capture");
                     }
                     else if (dtmp[10] == 0x01)
                     {
                         if (dtmp[9] == 0x00)
                         {
-                            ESP_LOGI(TAG, "验证指纹-获取图像成功");
+                            ESP_LOGI(TAG, "Verify fingerprint - Image capture succeeded");
                         }
                         else if (dtmp[9] == 0x26)
                         {
-                            ESP_LOGW(TAG, "验证指纹-获取图像超时");
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGW(TAG, "Verify fingerprint - Image capture timeout");
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                     else if (dtmp[10] == 0x05)
@@ -1068,175 +1050,171 @@ void uart_task(void *pvParameters)
                         {
                             uint8_t message = 0x01;
                             xQueueSend(fingerprint_queue, &message, portMAX_DELAY);
-                            uint16_t fingerID = (dtmp[11] << 8) | dtmp[12]; // 指纹ID
-                            uint16_t score = (dtmp[13] << 8) | dtmp[14];    // 得分
-                            ESP_LOGI(TAG, "验证指纹-搜到了指纹, 指纹ID: %u, 得分: %u", fingerID, score);
+                            uint16_t fingerID = (dtmp[11] << 8) | dtmp[12]; // Fingerprint ID
+                            uint16_t score = (dtmp[13] << 8) | dtmp[14];    // Matching score
+                            ESP_LOGI(TAG, "Verify fingerprint - Fingerprint found, ID: %u, Score: %u", fingerID, score);
                         }
                         else if (dtmp[9] == 0x09)
                         {
-                            ESP_LOGI(TAG, "验证指纹-没搜索到指纹");
+                            ESP_LOGI(TAG, "Verify fingerprint - No fingerprint found");
                             uint8_t message = 0x00;
                             xQueueSend(fingerprint_queue, &message, portMAX_DELAY);
                         }
                         else if (dtmp[9] == 0x24)
                         {
-                            ESP_LOGW(TAG, "验证指纹-指纹库为空");
+                            ESP_LOGW(TAG, "Verify fingerprint - Fingerprint library is empty");
                             uint8_t message = 0x00;
                             xQueueSend(fingerprint_queue, &message, portMAX_DELAY);
                         }
                     }
                     else if (dtmp[10] == 0x02 && dtmp[9] == 0x09)
                     {
-                        ESP_LOGW(TAG, "验证指纹-传感器上没有手指");
+                        ESP_LOGW(TAG, "Verify fingerprint - No finger on sensor");
                         uint8_t message = 0x00;
                         xQueueSend(fingerprint_queue, &message, portMAX_DELAY);
                     }
                     else
                     {
-                        ESP_LOGE(TAG, "验证指纹-未知数据，丢弃");
-                        // 打印接收到的未知数据
-                        ESP_LOG_BUFFER_HEX(TAG, dtmp, event.size);
-                        prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                        ESP_LOGE(TAG, "Verify fingerprint - Unknown data, discarded");
+                        prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                     }
                 }
-                else if (zw111.state == 0X01 && event.size == 44) // 读索引表状态
+                else if (zw111.state == 0X01 && event.size == 44) // Read index table state
                 {
-                    // 先接受数据
+                    // Receive data first
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-                    // 再验证收到的数据是否有效
+                    // Verify if received data is valid
                     if (verify_received_data(dtmp, event.size) != ESP_OK)
                     {
-                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
-                        break; // 丢弃无效数据
+                        ESP_LOGE(TAG, "Received invalid data, discarded");
+                        break; // Discard invalid data
                     }
-                    ESP_LOGI(TAG, "接收到索引表数据，长度: %u", event.size);
-                    fingerprint_parse_frame(dtmp, event.size); // 解析指纹索引表数据
-                    prepare_turn_off_fingerprint();            // 准备关闭指纹模块
+                    ESP_LOGI(TAG, "Received index table data, length: %u", event.size);
+                    fingerprint_parse_frame(dtmp, event.size); // Parse fingerprint index table data
+                    prepare_turn_off_fingerprint();            // Prepare to turn off fingerprint module
                 }
-                else if (zw111.state == 0X02 && event.size == 14) // 注册指纹状态
+                else if (zw111.state == 0X02 && event.size == 14) // Enroll fingerprint state
                 {
-                    // 先接受数据
+                    // Receive data first
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-                    // 再验证收到的数据是否有效
+                    // Verify if received data is valid
                     if (verify_received_data(dtmp, event.size) != ESP_OK)
                     {
-                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
-                        break; // 丢弃无效数据
+                        ESP_LOGE(TAG, "Received invalid data, discarded");
+                        break; // Discard invalid data
                     }
                     if (dtmp[10] == 0x00 && dtmp[11] == 0x00)
                     {
                         if (dtmp[9] == 0x00)
                         {
-                            ESP_LOGI(TAG, "注册指纹-命令执行成功，等待图像采集");
+                            ESP_LOGI(TAG, "Enroll fingerprint - Command executed successfully, waiting for image capture");
                         }
                         else if (dtmp[9] == 0x22)
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGE(TAG, "注册指纹-当前ID已被使用，请选择其他ID");
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGE(TAG, "Enroll fingerprint - Current ID is already in use, please select another ID");
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                         else
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGE(TAG, "注册指纹-未知数据，丢弃");
-                            // 打印接收到的未知数据
-                            ESP_LOG_BUFFER_HEX(TAG, dtmp, event.size);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGE(TAG, "Enroll fingerprint - Unknown data, discarded");
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                     else if (dtmp[10] == 0x01)
                     {
                         if (dtmp[9] == 0x00)
                         {
-                            ESP_LOGI(TAG, "注册指纹-第%u次采图成功", dtmp[11]);
+                            ESP_LOGI(TAG, "Enroll fingerprint - %uth image capture succeeded", dtmp[11]);
                         }
                         else if (dtmp[9] == 0x26)
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-第%u次采图超时", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - %uth image capture timeout", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                         else
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-第%u次采图失败", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - %uth image capture failed", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                     else if (dtmp[10] == 0x02)
                     {
                         if (dtmp[9] == 0x00)
                         {
-                            ESP_LOGI(TAG, "注册指纹-第%u次生成特征成功", dtmp[11]);
+                            ESP_LOGI(TAG, "Enroll fingerprint - %uth feature generation succeeded", dtmp[11]);
                         }
                         else if (dtmp[9] == 0x26)
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-第%u次生成特征超时", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - %uth feature generation timeout", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                         else
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-第%u次采图失败", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - %uth image capture failed", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                     else if (dtmp[10] == 0x03)
                     {
                         if (dtmp[9] == 0x00)
                         {
-                            ESP_LOGI(TAG, "注册指纹-手指第%u次离开，录入成功", dtmp[11]);
+                            ESP_LOGI(TAG, "Enroll fingerprint - Finger removed %uth time, enrollment succeeded", dtmp[11]);
                         }
                         else if (dtmp[9] == 0x26)
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-手指第%u次离开，录入超时", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - Finger removed %uth time, enrollment timeout", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                         else
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-手指第%u次离开，录入失败", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - Finger removed %uth time, enrollment failed", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                     else if (dtmp[10] == 0x04 && dtmp[11] == 0xF0)
                     {
                         if (dtmp[9] == 0x00)
                         {
-                            ESP_LOGI(TAG, "注册指纹-合并模板成功", dtmp[11]);
+                            ESP_LOGI(TAG, "Enroll fingerprint - Template merging succeeded", dtmp[11]);
                         }
                         else if (dtmp[9] == 0x26)
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-合并模板超时", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - Template merging timeout", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                         else
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-合并模板失败", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - Template merging failed", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                     else if (dtmp[10] == 0x05 && dtmp[11] == 0xF1)
                     {
                         if (dtmp[9] == 0x00)
                         {
-                            ESP_LOGI(TAG, "注册指纹-已注册检测通过");
+                            ESP_LOGI(TAG, "Enroll fingerprint - Enrollment detection passed");
                         }
                         else if (dtmp[9] == 0x26)
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-已注册检测超时");
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - Enrollment detection timeout");
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                         else
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-已注册检测未通过", dtmp[11]);
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - Enrollment detection failed", dtmp[11]);
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                     else if (dtmp[10] == 0x06 && dtmp[11] == 0xF2)
@@ -1244,72 +1222,72 @@ void uart_task(void *pvParameters)
                         if (dtmp[9] == 0x00)
                         {
                             send_operation_result("fingerprint_added", true);
-                            ESP_LOGI(TAG, "注册指纹-模板存储成功，id:%u", get_mini_unused_id());
+                            ESP_LOGI(TAG, "Enroll fingerprint - Template storage succeeded, ID: %u", get_mini_unused_id());
                             insert_fingerprint_id(get_mini_unused_id());
                             send_fingerprint_list();
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                         else if (dtmp[9] == 0x26)
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-模板存储超时");
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - Template storage timeout");
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                         else
                         {
                             send_operation_result("fingerprint_added", false);
-                            ESP_LOGI(TAG, "注册指纹-模板存储失败");
-                            prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                            ESP_LOGI(TAG, "Enroll fingerprint - Template storage failed");
+                            prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                         }
                     }
                 }
-                else if (zw111.state == 0X03 && event.size == 12) // 删除指纹状态
+                else if (zw111.state == 0X03 && event.size == 12) // Delete fingerprint state
                 {
-                    // 先接受数据
+                    // Receive data first
                     uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
-                    // 再验证收到的数据是否有效
+                    // Verify if received data is valid
                     if (verify_received_data(dtmp, event.size) != ESP_OK)
                     {
-                        ESP_LOGE(TAG, "接收到无效数据，丢弃");
-                        break; // 丢弃无效数据
+                        ESP_LOGE(TAG, "Received invalid data, discarded");
+                        break; // Discard invalid data
                     }
-                    // 处理删除清空指纹
+                    // Handle clear all fingerprints
                     if (g_ready_delete_fingerprint == false && g_ready_delete_all_fingerprint == true)
                     {
                         for (size_t i = 0; i <= zw111.fingerNumber; i++)
                         {
-                            zw111.fingerIDArray[i] = 0xFF; // 清空指纹ID
+                            zw111.fingerIDArray[i] = 0xFF; // Clear fingerprint IDs
                         }
                         send_operation_result("fingerprint_cleared", true);
-                        zw111.fingerNumber = 0;                 // 清空指纹数量
-                        g_ready_delete_all_fingerprint = false; // 重置删除所有指纹标志
-                        ESP_LOGI(TAG, "删除指纹-清空所有指纹成功");
+                        zw111.fingerNumber = 0;                 // Clear fingerprint count
+                        g_ready_delete_all_fingerprint = false; // Reset delete all fingerprints flag
+                        ESP_LOGI(TAG, "Delete fingerprint - Clear all fingerprints succeeded");
                     }
-                    // 处理删除单个指纹
+                    // Handle delete single fingerprint
                     else if (g_ready_delete_fingerprint == true && g_ready_delete_all_fingerprint == false)
                     {
-                        // 查找目标ID的位置
+                        // Find position of target ID
                         size_t i;
                         for (i = 0; i < zw111.fingerNumber; i++)
                         {
                             if (zw111.fingerIDArray[i] == g_deleteFingerprintID)
                             {
-                                break; // 找到目标，跳出循环准备删除
+                                break; // Target found, exit loop to prepare deletion
                             }
                         }
-                        // 前移元素填补空缺
+                        // Shift elements forward to fill the gap
                         for (size_t j = i; j < zw111.fingerNumber - 1; j++)
                         {
                             zw111.fingerIDArray[j] = zw111.fingerIDArray[j + 1];
                         }
-                        zw111.fingerIDArray[zw111.fingerNumber - 1] = 0xFF; // 将最后一个位置重置为0xFF
-                        zw111.fingerNumber--;                               // 减少指纹数量
+                        zw111.fingerIDArray[zw111.fingerNumber - 1] = 0xFF; // Reset last position to 0xFF
+                        zw111.fingerNumber--;                               // Decrease fingerprint count
                         send_operation_result("fingerprint_deleted", true);
                         send_fingerprint_list();
-                        g_ready_delete_fingerprint = false; // 重置删除单个指纹标志
-                        ESP_LOGI(TAG, "删除指纹-删除ID:%u成功", g_deleteFingerprintID);
+                        g_ready_delete_fingerprint = false; // Reset delete single fingerprint flag
+                        ESP_LOGI(TAG, "Delete fingerprint - Delete ID:%u succeeded", g_deleteFingerprintID);
                     }
-                    prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                    prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                 }
                 break;
             case UART_PATTERN_DET:
@@ -1331,57 +1309,57 @@ void uart_task(void *pvParameters)
                     uart_read_bytes(EX_UART_NUM, pat, 1, pdMS_TO_TICKS(100));
                     if (pat[0] == 0X55)
                     {
-                        ESP_LOGI(TAG, "指纹模块刚上电，状态: %s",
-                                 zw111.state == 0x00   ? "初始状态"
-                                 : zw111.state == 0x01 ? "读索引表状态"
-                                 : zw111.state == 0x02 ? "注册指纹状态"
-                                 : zw111.state == 0x03 ? "删除指纹状态"
-                                 : zw111.state == 0x04 ? "验证指纹状态"
-                                 : zw111.state == 0x0A ? "取消状态"
-                                 : zw111.state == 0x0B ? "休眠状态"
-                                                       : "未知状态");
-                        if (zw111.state == 0X04) // 验证指纹状态
+                        ESP_LOGI(TAG, "Fingerprint module just powered on, state: %s",
+                                 zw111.state == 0x00   ? "Initial state"
+                                 : zw111.state == 0x01 ? "Read index table state"
+                                 : zw111.state == 0x02 ? "Enroll fingerprint state"
+                                 : zw111.state == 0x03 ? "Delete fingerprint state"
+                                 : zw111.state == 0x04 ? "Verify fingerprint state"
+                                 : zw111.state == 0x0A ? "Cancel state"
+                                 : zw111.state == 0x0B ? "Sleep state"
+                                                       : "Unknown state");
+                        if (zw111.state == 0X04) // Verify fingerprint state
                         {
-                            // 发送验证指纹命令
+                            // Send verify fingerprint command
                             if (auto_identify(0xFFFF, 2, false, false, false) != ESP_OK)
                             {
-                                ESP_LOGE(TAG, "验证指纹命令发送失败");
-                                prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                                ESP_LOGE(TAG, "Failed to send verify fingerprint command");
+                                prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                             }
                         }
-                        else if (zw111.state == 0X00) // 刚开机的状态
+                        else if (zw111.state == 0X00) // Just powered on state
                         {
-                            zw111.state = 0X01; // 切换为读索引表状态
+                            zw111.state = 0X01; // Switch to read index table state
                             read_index_table(0);
                         }
-                        else if (zw111.state == 0X02) // 注册指纹状态
+                        else if (zw111.state == 0X02) // Enroll fingerprint state
                         {
-                            ESP_LOGI(TAG, "指纹模块处于注册状态，准备注册指纹，ID:%u", get_mini_unused_id());
-                            // 发送注册指纹命令
+                            ESP_LOGI(TAG, "Fingerprint module in enrollment state, preparing to enroll fingerprint, ID:%u", get_mini_unused_id());
+                            // Send enroll fingerprint command
                             if (auto_enroll(get_mini_unused_id(), 5, false, false, false, false, true, false) != ESP_OK)
                             {
-                                ESP_LOGE(TAG, "注册指纹命令发送失败");
-                                prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                                ESP_LOGE(TAG, "Failed to send enroll fingerprint command");
+                                prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                             }
                         }
-                        else if (zw111.state == 0X03) // 删除指纹状态
+                        else if (zw111.state == 0X03) // Delete fingerprint state
                         {
                             if (g_ready_delete_fingerprint == true && g_ready_delete_all_fingerprint == false)
                             {
-                                // 删除一个指纹
+                                // Delete single fingerprint
                                 if (delete_char(g_deleteFingerprintID, 1) != ESP_OK)
                                 {
-                                    ESP_LOGE(TAG, "删除指纹命令发送失败");
-                                    prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                                    ESP_LOGE(TAG, "Failed to send delete fingerprint command");
+                                    prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                                 }
                             }
                             else if (g_ready_delete_fingerprint == false && g_ready_delete_all_fingerprint == true)
                             {
-                                // 删除所有指纹
+                                // Delete all fingerprints
                                 if (empty() != ESP_OK)
                                 {
-                                    ESP_LOGE(TAG, "删除所有指纹命令发送失败");
-                                    prepare_turn_off_fingerprint(); // 准备关闭指纹模块
+                                    ESP_LOGE(TAG, "Failed to send delete all fingerprints command");
+                                    prepare_turn_off_fingerprint(); // Prepare to turn off fingerprint module
                                 }
                             }
                         }

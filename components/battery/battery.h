@@ -7,8 +7,8 @@
 #include <esp_adc/adc_oneshot.h>
 #include <esp_adc/adc_cali.h>
 #include <esp_adc/adc_cali_scheme.h>
-#include "ssd1306.h"
-#include "ssd1306_fonts.h"
+#include "oled.h"
+#include "oled_fonts.h"
 
 // Voltage divider resistors (in kOhms)
 #define R_UPPER 680.0f

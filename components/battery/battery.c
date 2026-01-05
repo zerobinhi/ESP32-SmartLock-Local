@@ -50,19 +50,19 @@ void battery_task(void *arg)
         ESP_LOGI(TAG, "Battery Voltage: %.2f mV", battery_voltage);
         if (battery_voltage >= BATTERY_FULL_MV)
         {
-            ssd1306_draw_bitmap(112, 2, &c_chBat816_Full[0], 16, 8, 0);
+            oled_draw_bitmap(112, 2, &c_chBat816_Full[0], 16, 8, 0);
         }
         else if (battery_voltage >= BATTERY_TWO_THIRD_MV)
         {
-            ssd1306_draw_bitmap(112, 2, &c_chBat816_TwoThird[0], 16, 8, 0);
+            oled_draw_bitmap(112, 2, &c_chBat816_TwoThird[0], 16, 8, 0);
         }
         else if (battery_voltage >= BATTERY_ONE_THIRD_MV)
         {
-            ssd1306_draw_bitmap(112, 2, &c_chBat816_OneThird[0], 16, 8, 0);
+            oled_draw_bitmap(112, 2, &c_chBat816_OneThird[0], 16, 8, 0);
         }
         else
         {
-            ssd1306_draw_bitmap(112, 2, &c_chBat816_Empty[0], 16, 8, 0);
+            oled_draw_bitmap(112, 2, &c_chBat816_Empty[0], 16, 8, 0);
         }
 
         vTaskDelay(pdMS_TO_TICKS(6000)); // delay 6 seconds

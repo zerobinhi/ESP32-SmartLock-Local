@@ -1,5 +1,5 @@
-#ifndef SSD1306_FONTS_H_
-#define SSD1306_FONTS_H_
+#ifndef OLED_FONTS_H_
+#define OLED_FONTS_H_
 
 #include <stdint.h>
 
@@ -20,4 +20,4 @@ extern const uint8_t c_chGPRS88[8];
 extern const uint8_t c_chAlarm88[8];
 extern unsigned char BMP1[];
 
-#endif /* SSD1306_FONTS_H_ */
+#endif /* OLED_FONTS_H_ */

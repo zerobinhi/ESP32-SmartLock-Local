@@ -1,4 +1,4 @@
-idf_component_register(SRCS "ssd1306.c" "ssd1306_fonts.c"
+idf_component_register(SRCS "oled.c" "oled_fonts.c"
                        INCLUDE_DIRS "."
                        REQUIRES driver main
                        )

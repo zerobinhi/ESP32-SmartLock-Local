@@ -6,7 +6,7 @@
 #include "web_server.h"
 #include "zw111.h"
 #include "pn532_i2c.h"
-#include "ssd1306.h"
+#include "oled.h"
 #include "touch.h"
 #include "battery.h"
 #include "nvs_custom.h"
@@ -28,13 +28,13 @@ void app_main(void)
     ESP_LOGI(TAG, "Initializing system components...");
 
     // initializing OLED display
-    if (ssd1306_initialization() != ESP_OK)
+    if (oled_initialization() != ESP_OK)
     {
         ESP_LOGE(TAG, "OLED display initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "SSD1306 OLED display initialization successful");
+        ESP_LOGI(TAG, "OLED display initialization successful");
     }
 
     // initializing battery monitoring

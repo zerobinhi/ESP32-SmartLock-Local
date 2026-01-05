@@ -6,82 +6,82 @@
 #include "app_config.h"
 #include "buzzer.h"
 
-#define EX_UART_NUM UART_NUM_2        // 指纹模块使用的UART端口
+#define EX_UART_NUM UART_NUM_2 // UART port used by fingerprint module
 
-#define CHECKSUM_LEN 2         // 校验和长度（字节，固定为2）
-#define CHECKSUM_START_INDEX 6 // 校验和计算起始索引（包标识位置）
+#define CHECKSUM_LEN 2         // Checksum length (bytes, fixed to 2)
+#define CHECKSUM_START_INDEX 6 // Checksum calculation start index (packet identifier position)
 
-#define PACKET_CMD 0x01       // 命令包（主机发送指令）
-#define PACKET_DATA_MORE 0x02 // 数据包（有后续包）
-#define PACKET_DATA_LAST 0x08 // 最后一个数据包（无后续）
-#define PACKET_RESPONSE 0x07  // 应答包（模块返回结果）
+#define PACKET_CMD 0x01       // Command packet (host sends instruction)
+#define PACKET_DATA_MORE 0x02 // Data packet (with subsequent packets)
+#define PACKET_DATA_LAST 0x08 // Last data packet (no subsequent packets)
+#define PACKET_RESPONSE 0x07  // Response packet (module returns result)
 
-#define CMD_AUTO_ENROLL 0x31      // 自动注册指纹指令
-#define CMD_AUTO_IDENTIFY 0x32    // 自动识别指纹指令
-#define CMD_CONTROL_BLN 0x3C      // 背光灯（LED）控制指令
-#define CMD_DELET_CHAR 0x0C       // 删除指定指纹指令
-#define CMD_EMPTY 0x0D            // 清空所有指纹指令
-#define CMD_CANCEL 0x30           // 取消当前操作指令
-#define CMD_READ_INDEX_TABLE 0x1F // 读取指纹索引表指令
-#define CMD_SLEEP 0x33            // 模块休眠指令
+#define CMD_AUTO_ENROLL 0x31      // Auto-enroll fingerprint command
+#define CMD_AUTO_IDENTIFY 0x32    // Auto-identify fingerprint command
+#define CMD_CONTROL_BLN 0x3C      // Backlight (LED) control command
+#define CMD_DELET_CHAR 0x0C       // Delete specified fingerprint command
+#define CMD_EMPTY 0x0D            // Clear all fingerprints command
+#define CMD_CANCEL 0x30           // Cancel current operation command
+#define CMD_READ_INDEX_TABLE 0x1F // Read fingerprint index table command
+#define CMD_SLEEP 0x33            // Module sleep command
 
-#define BLN_BREATH 1   // 普通呼吸灯模式
-#define BLN_FLASH 2    // 闪烁灯模式
-#define BLN_ON 3       // 常亮模式
-#define BLN_OFF 4      // 常闭模式
-#define BLN_FADE_IN 5  // 渐亮模式
-#define BLN_FADE_OUT 6 // 渐暗模式
-#define BLN_COLORFUL 7 // 七彩循环模式
+#define BLN_BREATH 1   // Normal breathing light mode
+#define BLN_FLASH 2    // Flashing light mode
+#define BLN_ON 3       // Always on mode
+#define BLN_OFF 4      // Always off mode
+#define BLN_FADE_IN 5  // Fade-in mode
+#define BLN_FADE_OUT 6 // Fade-out mode
+#define BLN_COLORFUL 7 // Colorful cycle mode
 
-// LED颜色定义（bit0-蓝, bit1-绿, bit2-红）
-#define LED_OFF 0x00   // 全灭
-#define LED_BLUE 0x01  // 蓝灯
-#define LED_GREEN 0x02 // 绿灯
-#define LED_RED 0x04   // 红灯
-#define LED_BG 0x03    // 蓝+绿灯
-#define LED_BR 0x05    // 蓝+红灯
-#define LED_GR 0x06    // 绿+红灯
-#define LED_ALL 0x07   // 红+绿+蓝全亮
+// LED color definition (bit0-Blue, bit1-Green, bit2-Red)
+#define LED_OFF 0x00   // All lights off
+#define LED_BLUE 0x01  // Blue light only
+#define LED_GREEN 0x02 // Green light only
+#define LED_RED 0x04   // Red light only
+#define LED_BG 0x03    // Blue + Green lights
+#define LED_BR 0x05    // Blue + Red lights
+#define LED_GR 0x06    // Green + Red lights
+#define LED_ALL 0x07   // Red + Green + Blue (all lights on)
 
-// ========================== 数据结构定义 ==========================
+// ========================== Data Structure Definition ==========================
 struct fingerprint_device
 {
     /**
-     * 0X00 刚开机的状态
-     * 0X01 读索引表状态
-     * 0X02 注册指纹状态
-     * 0X03 删除指纹状态
-     * 0X04 验证指纹状态
-     * 0X0A 取消命令状态
-     * 0X0B 准备关机状态
+     * 0X00 Just powered on state
+     * 0X01 Read index table state
+     * 0X02 Enroll fingerprint state
+     * 0X03 Delete fingerprint state
+     * 0X04 Verify fingerprint state
+     * 0X0A Cancel command state
+     * 0X0B Prepare to power off state
      */
     uint8_t state;
 
     /**
-     * false 断电状态
-     * true 上电状态
+     * false Power-off state
+     * true Power-on state
      */
     bool power;
 
-    // 设备地址（4字节），默认地址0xFFFFFFFF，可修改
+    // Device address (4 bytes), default address 0xFFFFFFFF, modifiable
     uint8_t deviceAddress[4];
 
-    // 已注册指纹ID数组，最大支持100枚（0-99），未使用位置为0xFF
+    // Enrolled fingerprint ID array, maximum 100 entries (0-99), unused positions are 0xFF
     uint8_t fingerIDArray[100];
 
-    // 当前有效指纹数量
+    // Current number of valid fingerprints
     uint8_t fingerNumber;
 };
 
-extern bool g_ready_add_fingerprint;                                  // 准备添加指纹标志
-extern bool g_cancel_add_fingerprint;                                 // 取消添加指纹标志
-extern bool g_ready_delete_fingerprint;                               // 准备删除指纹标志
-extern bool g_ready_delete_all_fingerprint;                           // 准备删除所有指纹标志
-extern uint8_t g_deleteFingerprintID;                                 // 准备删除的指纹ID
-extern void send_fingerprint_list();                                  // 发送当前指纹列表到前端
-extern void send_operation_result(const char *message, bool success); // 发送操作结果到前端
-extern bool g_gpio_isr_service_installed;                             // 是否安装了GPIO中断服务
-extern QueueHandle_t fingerprint_queue; // 指纹模块→蜂鸣器的消息队列
+extern bool g_ready_add_fingerprint;                                  // Flag for preparing to add fingerprint
+extern bool g_cancel_add_fingerprint;                                 // Flag for canceling fingerprint addition
+extern bool g_ready_delete_fingerprint;                               // Flag for preparing to delete fingerprint
+extern bool g_ready_delete_all_fingerprint;                           // Flag for preparing to delete all fingerprints
+extern uint8_t g_deleteFingerprintID;                                 // Fingerprint ID to be deleted
+extern void send_fingerprint_list();                                  // Send current fingerprint list to front-end
+extern void send_operation_result(const char *message, bool success); // Send operation result to front-end
+extern bool g_gpio_isr_service_installed;                             // Whether GPIO interrupt service is installed
+extern QueueHandle_t fingerprint_queue;                               // Message queue from fingerprint module to buzzer
 
 void fingerprint_task(void *pvParameters);
 void uart_task(void *pvParameters);
