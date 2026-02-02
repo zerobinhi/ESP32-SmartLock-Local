@@ -819,7 +819,6 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
     uint32_t gpio_num = (uint32_t)arg;
     if (gpio_num == FINGERPRINT_INT_PIN && gpio_get_level(FINGERPRINT_INT_PIN) == 1)
     {
-        ESP_EARLY_LOGI(TAG, "Fingerprint module interrupt triggered, gpio_num=%u", gpio_num);
         xSemaphoreGiveFromISR(fingerprint_semaphore, NULL);
     }
 }
@@ -936,7 +935,7 @@ void uart_task(void *pvParameters)
     static uint8_t dtmp[1024];
     while (1)
     {
-        if (xQueueReceive(uart2_queue, (void *)&event, (TickType_t)portMAX_DELAY))
+        if (xQueueReceive(uart2_queue, (void *)&event, portMAX_DELAY))
         {
             bzero(dtmp, 1024);
             size_t buffered_size;

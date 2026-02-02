@@ -20,11 +20,11 @@
 
 #define I2C_MASTER_SCL_IO 47      /*!< GPIO for I2C master clock */
 #define I2C_MASTER_SDA_IO 21      /*!< GPIO for I2C master data */
-#define PN532_RST_PIN 48          /*!< GPIO for PN532 reset */
-#define PN532_INT_PIN 36           /*!< GPIO for PN532 interrupt */
+#define PN7160_RST_PIN 48         /*!< GPIO for PN7160 reset */
+#define PN7160_INT_PIN 36         /*!< GPIO for PN7160 interrupt */
 #define I2C_MASTER_NUM I2C_NUM_0  /*!< I2C port number */
-#define I2C_MASTER_FREQ_HZ 400000 /*!< I2C master clock frequency */
-#define PN532_I2C_ADDRESS ((uint8_t)0x24)
+#define I2C_MASTER_FREQ_HZ 100000 /*!< I2C master clock frequency */
+#define PN7160_I2C_ADDRESS ((uint8_t)0x28)
 #define OLED_I2C_ADDRESS ((uint8_t)0x3C)
 
 #define LOCK_CTL_PIN 35
@@ -39,7 +39,7 @@
 
 #define MAX_CARDS 20
 
-#define TOUCH_PASSWORD_LEN 6 
+#define TOUCH_PASSWORD_LEN 6
 #define DEFAULT_PASSWORD "123456"
 
 #define true 1

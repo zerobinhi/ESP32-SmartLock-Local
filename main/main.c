@@ -5,7 +5,7 @@
 #include "spiffs.h"
 #include "web_server.h"
 #include "zw111.h"
-#include "pn532_i2c.h"
+#include "pn7160_i2c.h"
 #include "oled.h"
 #include "touch.h"
 #include "battery.h"
@@ -65,13 +65,13 @@ void app_main(void)
         ESP_LOGI(TAG, "fingerprint module initialization successful");
     }
 
-    if (pn532_initialization() != ESP_OK)
+    if (pn7160_initialization() != ESP_OK)
     {
-        ESP_LOGE(TAG, "PN532 module initialization failed");
+        ESP_LOGE(TAG, "PN7160 module initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "PN532 module initialization successful");
+        ESP_LOGI(TAG, "PN7160 module initialization successful");
     }
 
     if (touch_initialization() != ESP_OK)
@@ -85,9 +85,9 @@ void app_main(void)
 
     // spiffs_init_and_load_webpage();
     // wifi_init_softap();
-    // web_server_start(); // start web server
+    // web_server_start();
 
-    ESP_LOGI(TAG, "Function: %s, File: %s, Line: %d\n", __func__, __FILE__, __LINE__);
+    ESP_LOGI(TAG, "Function: %s, File: %s, Line: %d", __func__, __FILE__, __LINE__);
 
     ESP_LOGI(TAG, "smart lock system initialization complete.");
 }
