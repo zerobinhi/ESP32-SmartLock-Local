@@ -18,8 +18,8 @@
 #define FINGERPRINT_CTL_PIN 17
 #define FINGERPRINT_INT_PIN 18
 
-#define I2C_MASTER_SCL_IO 47      /*!< GPIO for I2C master clock */
-#define I2C_MASTER_SDA_IO 21      /*!< GPIO for I2C master data */
+#define I2C_MASTER_SCL_IO 21      /*!< GPIO for I2C master clock */
+#define I2C_MASTER_SDA_IO 47      /*!< GPIO for I2C master data */
 #define PN7160_RST_PIN 48         /*!< GPIO for PN7160 reset */
 #define PN7160_INT_PIN 36         /*!< GPIO for PN7160 interrupt */
 #define I2C_MASTER_NUM I2C_NUM_0  /*!< I2C port number */
@@ -30,10 +30,10 @@
 #define LOCK_CTL_PIN 35
 #define BUZZER_CTL_PIN 20
 
-#define FINGERPRINT_LED_PIN 38
-#define PASSWORD_LED_PIN 39
-#define CARD_LED_PIN 37
 #define APP_LED_PIN 19
+#define CARD_LED_PIN 37
+#define FINGERPRINT_LED_PIN 40
+#define PASSWORD_LED_PIN 39
 
 #define BATTERY_PIN 1
 

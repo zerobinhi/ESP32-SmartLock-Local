@@ -87,14 +87,6 @@ esp_err_t pn7160_initialization(void)
 
     gpio_config(&rst_cfg);
 
-    /* Hardware reset PN7160 */
-    gpio_set_level(PN7160_RST_PIN, 0);
-    vTaskDelay(pdMS_TO_TICKS(10));
-    gpio_set_level(PN7160_RST_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(30));
-
-    ESP_LOGI(TAG, "PN7160 reset completed");
-
     /* Configure interrupt pin*/
     gpio_config_t pn7160_irq_cfg = {
         .pin_bit_mask = (1ULL << PN7160_INT_PIN),
@@ -106,13 +98,14 @@ esp_err_t pn7160_initialization(void)
 
     /* Install GPIO ISR service if needed */
     if (!g_gpio_isr_service_installed)
-
     {
         gpio_install_isr_service(0);
         g_gpio_isr_service_installed = true;
+        ESP_LOGI(TAG, "GPIO ISR service installed");
     }
 
     gpio_isr_handler_add(PN7160_INT_PIN, gpio_isr_handler, (void *)PN7160_INT_PIN);
+    ESP_LOGI(TAG, "PN7160 INT pin ISR handler added");
 
     /* Load card data from NVS */
     esp_err_t err = nvs_custom_get_u8(NULL, "card", "count", &g_card_count);
@@ -128,6 +121,14 @@ esp_err_t pn7160_initialization(void)
 
         ESP_LOGI(TAG, "Loaded %d cards from NVS", g_card_count);
     }
+
+    /* Hardware reset PN7160 */
+    gpio_set_level(PN7160_RST_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    gpio_set_level(PN7160_RST_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(30));
+
+    ESP_LOGI(TAG, "PN7160 reset completed");
 
     /* pn7160 initialization sequence */
     uint8_t CORE_RESET_CMD[4] = {0x20, 0x00, 0x01, 0x01}; // Core reset command, reset configuration
@@ -174,10 +175,10 @@ esp_err_t pn7160_initialization(void)
     i2c_master_receive(pn7160_handle, CORE_INIT_RSP, sizeof(CORE_INIT_RSP), portMAX_DELAY);
     ESP_LOGI(TAG, "pn7160 core init response: ");
     ESP_LOG_BUFFER_HEX(TAG, CORE_INIT_RSP, sizeof(CORE_INIT_RSP));
-    uint8_t NCI_PROPRIETARY_ACT_CMD[3] = {0x2F, 0x02, 0x01}; // NCI proprietary activation command
+    uint8_t NCI_PROPRIETARY_ACT_CMD[3] = {0x2F, 0x02, 0x00}; // NCI proprietary activation command
     i2c_master_transmit(pn7160_handle, NCI_PROPRIETARY_ACT_CMD, sizeof(NCI_PROPRIETARY_ACT_CMD), portMAX_DELAY);
     xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for activation
-    uint8_t NCI_PROPRIETARY_ACT_RSP[7] = {0};
+    uint8_t NCI_PROPRIETARY_ACT_RSP[8] = {0};
     i2c_master_receive(pn7160_handle, NCI_PROPRIETARY_ACT_RSP, sizeof(NCI_PROPRIETARY_ACT_RSP), portMAX_DELAY);
     ESP_LOGI(TAG, "pn7160 NCI proprietary activation response: ");
     ESP_LOG_BUFFER_HEX(TAG, NCI_PROPRIETARY_ACT_RSP, sizeof(NCI_PROPRIETARY_ACT_RSP));

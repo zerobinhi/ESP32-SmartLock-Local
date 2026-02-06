@@ -19,15 +19,6 @@ esp_err_t gpio_initialization(void)
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&fingerprint_led_cfg);
 
-    // APP LED GPIO
-    gpio_config_t app_led_cfg = {
-        .pin_bit_mask = (1ULL << APP_LED_PIN),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE};
-    gpio_config(&app_led_cfg);
-
     // Password LED GPIO
     gpio_config_t password_led_cfg = {
         .pin_bit_mask = (1ULL << PASSWORD_LED_PIN),
@@ -45,6 +36,15 @@ esp_err_t gpio_initialization(void)
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&card_led_cfg);
+
+    // APP LED GPIO
+    gpio_config_t app_led_cfg = {
+        .pin_bit_mask = (1ULL << APP_LED_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE};
+    gpio_config(&app_led_cfg);
 
     // Lock control GPIO
     gpio_config_t lock_ctl_cfg = {

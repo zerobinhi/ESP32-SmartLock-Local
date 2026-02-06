@@ -27,14 +27,13 @@ void app_main(void)
     // initialize system components
     ESP_LOGI(TAG, "Initializing system components...");
 
-    // initializing OLED display
-    if (oled_initialization() != ESP_OK)
+    if (touch_initialization() != ESP_OK)
     {
-        ESP_LOGE(TAG, "OLED display initialization failed");
+        ESP_LOGE(TAG, "capacitive touch button initialization failed");
     }
     else
     {
-        ESP_LOGI(TAG, "OLED display initialization successful");
+        ESP_LOGI(TAG, "capacitive touch button initialization successful");
     }
 
     // initializing battery monitoring
@@ -45,6 +44,16 @@ void app_main(void)
     else
     {
         ESP_LOGI(TAG, "battery monitoring initialization successful");
+    }
+
+    // initializing OLED display
+    if (oled_initialization() != ESP_OK)
+    {
+        ESP_LOGE(TAG, "OLED display initialization failed");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "OLED display initialization successful");
     }
 
     if (smart_lock_buzzer_init() != ESP_OK)
@@ -72,15 +81,6 @@ void app_main(void)
     else
     {
         ESP_LOGI(TAG, "PN7160 module initialization successful");
-    }
-
-    if (touch_initialization() != ESP_OK)
-    {
-        ESP_LOGE(TAG, "capacitive touch button initialization failed");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "capacitive touch button initialization successful");
     }
 
     // spiffs_init_and_load_webpage();
