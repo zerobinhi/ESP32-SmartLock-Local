@@ -9,32 +9,6 @@ static uint8_t oled_buffer[OLED_WIDTH][8];
 
 i2c_master_dev_handle_t oled_handle;
 
-/**
- * @brief oled显示任务，包括显示当前电量、显示是否有设备连接WiFi等信息
- * @param arg 任务参数（未使用，传入NULL）
- * @return void
- */
-static void oled_task(void *arg)
-{
-    static uint16_t count = 0;
-    oled_clear(0);
-    oled_draw_bitmap(0, 2, &c_chSingal816[0], 16, 8, 0);
-    oled_draw_bitmap(24, 2, &c_chBluetooth88[0], 8, 8, 0);
-    oled_draw_bitmap(40, 2, &c_chMsg816[0], 16, 8, 0);
-    oled_draw_bitmap(64, 2, &c_chGPRS88[0], 8, 8, 0);
-    oled_draw_bitmap(90, 2, &c_chAlarm88[0], 8, 8, 0);
-    oled_refresh();
-
-    while (1)
-    {
-        oled_show_string(0, 16, "System Ready", 16, 0);
-        oled_show_num(0, 32, count, 6, 16, 0);
-        oled_refresh();
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        count++;
-    }
-}
-
 // I2C 底层通信
 static esp_err_t _oled_write_cmd(uint8_t *cmd, size_t len)
 {
@@ -117,7 +91,12 @@ esp_err_t oled_init(void)
 
     oled_clear(0);
 
-    xTaskCreate(oled_task, "oled_task", 2048, NULL, 10, NULL);
+    oled_draw_bitmap(0, 2, &c_chSingal816[0], 16, 8, 0);
+    oled_draw_bitmap(24, 2, &c_chBluetooth88[0], 8, 8, 0);
+    oled_draw_bitmap(40, 2, &c_chMsg816[0], 16, 8, 0);
+    oled_draw_bitmap(64, 2, &c_chGPRS88[0], 8, 8, 0);
+    oled_draw_bitmap(90, 2, &c_chAlarm88[0], 8, 8, 0);
+    oled_draw_bitmap(0, 21, BMP2, 128, 32, 0);
 
     return oled_refresh();
 }
@@ -322,7 +301,7 @@ void oled_show_num(uint8_t x, uint8_t y, int32_t num, uint8_t len, uint8_t size,
     oled_show_string(x, y, buf, size, color);
 }
 
-void oled_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_t dec_len,uint8_t size, uint8_t color)
+void oled_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_t dec_len, uint8_t size, uint8_t color)
 {
     if (int_len == 0 || dec_len == 0)
         return;
@@ -352,7 +331,7 @@ void oled_show_float(uint8_t x, uint8_t y, float num, uint8_t int_len, uint8_t d
 }
 
 // 图形显示
-void oled_draw_bitmap(uint8_t x, uint8_t y, const uint8_t *bmp,uint8_t w, uint8_t h, uint8_t color)
+void oled_draw_bitmap(uint8_t x, uint8_t y, const uint8_t *bmp, uint8_t w, uint8_t h, uint8_t color)
 {
     if (!bmp)
         return;
@@ -368,6 +347,31 @@ void oled_draw_bitmap(uint8_t x, uint8_t y, const uint8_t *bmp,uint8_t w, uint8_
                 uint8_t py = y + block * 8 + bit;
                 if (py >= OLED_HEIGHT)
                     break;
+                uint8_t pixel = (data & (1 << bit)) ? 1 : 0;
+                if (color)
+                    pixel = !pixel;
+                oled_draw_point(x + col, py, pixel);
+            }
+        }
+    }
+}
+
+void oled_show_chinese(uint8_t x, uint8_t y, uint8_t no, uint8_t color)
+{
+    if (x >= OLED_WIDTH || y >= OLED_HEIGHT)
+        return;
+    const uint8_t *hz_up = Hzk[no * 2];
+    const uint8_t *hz_down = Hzk[no * 2 + 1];
+
+    for (uint8_t block = 0; block < 2; block++)
+    {
+        const uint8_t *dataPtr = (block == 0) ? hz_up : hz_down;
+        for (uint8_t col = 0; col < 16; col++)
+        {
+            uint8_t data = dataPtr[col];
+            for (uint8_t bit = 0; bit < 8; bit++)
+            {
+                uint8_t py = y + block * 8 + bit;
                 uint8_t pixel = (data & (1 << bit)) ? 1 : 0;
                 if (color)
                     pixel = !pixel;

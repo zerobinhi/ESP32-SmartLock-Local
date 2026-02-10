@@ -829,16 +829,25 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
  */
 esp_err_t fingerprint_initialization()
 {
+    fingerprint_semaphore = xSemaphoreCreateBinary(); // Only used to activate the module after touch detection
+    if (g_gpio_isr_service_installed == false)
+    {
+        gpio_install_isr_service(0);
+        g_gpio_isr_service_installed = true;
+    }
+
     // Initialize UART communication
     if (fingerprint_initialization_uart() != ESP_OK)
     {
         return ESP_FAIL;
     }
+
     // Initialize fingerprint module data structure
     zw111.deviceAddress[0] = 0xFF;
     zw111.deviceAddress[1] = 0xFF;
     zw111.deviceAddress[2] = 0xFF;
     zw111.deviceAddress[3] = 0xFF;
+
     gpio_config_t zw111_int_gpio_config = {
         .pin_bit_mask = (1ULL << FINGERPRINT_INT_PIN),
         .mode = GPIO_MODE_INPUT,
@@ -846,6 +855,7 @@ esp_err_t fingerprint_initialization()
         .pull_down_en = GPIO_PULLDOWN_ENABLE,
         .intr_type = GPIO_INTR_POSEDGE};
     gpio_config(&zw111_int_gpio_config);
+
     gpio_config_t fingerprint_ctl_gpio_config = {
         .pin_bit_mask = (1ULL << FINGERPRINT_CTL_PIN),
         .mode = GPIO_MODE_OUTPUT,
@@ -854,21 +864,19 @@ esp_err_t fingerprint_initialization()
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&fingerprint_ctl_gpio_config);
 
-    fingerprint_semaphore = xSemaphoreCreateBinary(); // Only used to activate the module after touch detection
-    if (g_gpio_isr_service_installed == false)
-    {
-        gpio_install_isr_service(0);
-        g_gpio_isr_service_installed = true;
-    }
+    gpio_set_level(FINGERPRINT_CTL_PIN, 0);
+
     gpio_isr_handler_add(FINGERPRINT_INT_PIN, gpio_isr_handler, (void *)FINGERPRINT_INT_PIN);
     ESP_LOGI(TAG, "zw111 interrupt gpio configured");
+
     // Create a task to handle UART event from ISR
     xTaskCreate(uart_task, "uart_task", 8192, NULL, 10, NULL);
     ESP_LOGI(TAG, "uart task created");
+
+    // Create a task to handle fingerprint processing after touch detection
     xTaskCreate(fingerprint_task, "fingerprint_task", 8192, NULL, 10, NULL);
     ESP_LOGI(TAG, "fingerprint task created");
-    // xTaskCreate(buzzer_task, "buzzer_task", 8192, NULL, 10, NULL);
-    ESP_LOGI(TAG, "buzzer task created");
+
     return ESP_OK;
 }
 

@@ -83,6 +83,9 @@ esp_err_t pn7160_initialization(void)
     gpio_config_t rst_cfg = {
         .pin_bit_mask = (1ULL << PN7160_RST_PIN),
         .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
     };
 
     gpio_config(&rst_cfg);
@@ -158,7 +161,7 @@ esp_err_t pn7160_initialization(void)
     uint8_t CORE_SET_CONFIG_CMD[8] = {0x20, 0x02, 0x05, 0x01, 0x00, 0x02, 0xFE, 0X01}; // Core set config command to enable extended length
     i2c_master_transmit(pn7160_handle, CORE_SET_CONFIG_CMD, sizeof(CORE_SET_CONFIG_CMD), portMAX_DELAY);
     xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for config
-    uint8_t CORE_SET_CONFIG_RSP[4] = {0};
+    uint8_t CORE_SET_CONFIG_RSP[5] = {0};
     i2c_master_receive(pn7160_handle, CORE_SET_CONFIG_RSP, sizeof(CORE_SET_CONFIG_RSP), portMAX_DELAY);
     ESP_LOGI(TAG, "pn7160 core set config response: %02x %02x %02x %02x", CORE_SET_CONFIG_RSP[0], CORE_SET_CONFIG_RSP[1], CORE_SET_CONFIG_RSP[2], CORE_SET_CONFIG_RSP[3]);
     uint8_t CORE_RESET_CMD_KEEP[4] = {0x20, 0x00, 0x01, 0x00}; // Core reset command
@@ -385,6 +388,7 @@ void pn7160_task(void *arg)
                 xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for mapping
                 i2c_master_receive(pn7160_handle, RF_DEACTIVATE_RSP, sizeof(RF_DEACTIVATE_RSP), portMAX_DELAY);
                 ESP_LOGI(TAG, "RF deactivate response: %02x %02x %02x %02x", RF_DEACTIVATE_RSP[0], RF_DEACTIVATE_RSP[1], RF_DEACTIVATE_RSP[2], RF_DEACTIVATE_RSP[3]);
+                xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for mapping
                 i2c_master_receive(pn7160_handle, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF), portMAX_DELAY);
                 ESP_LOGI(TAG, "RF deactivate notification:");
                 ESP_LOG_BUFFER_HEX(TAG, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF));

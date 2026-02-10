@@ -64,7 +64,8 @@ void battery_task(void *arg)
         {
             oled_draw_bitmap(112, 2, &c_chBat816_Empty[0], 16, 8, 0);
         }
-
+        oled_refresh();
+        ESP_LOGI(TAG, "Battery voltage updated on OLED");
         vTaskDelay(pdMS_TO_TICKS(6000)); // delay 6 seconds
     }
 }

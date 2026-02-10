@@ -24,6 +24,7 @@ void app_main(void)
     {
         ESP_LOGI(TAG, "NVS initialization successful");
     }
+
     // initialize system components
     ESP_LOGI(TAG, "Initializing system components...");
 
@@ -36,16 +37,6 @@ void app_main(void)
         ESP_LOGI(TAG, "capacitive touch button initialization successful");
     }
 
-    // initializing battery monitoring
-    if (battery_init() != ESP_OK)
-    {
-        ESP_LOGE(TAG, "battery monitoring initialization failed");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "battery monitoring initialization successful");
-    }
-
     // initializing OLED display
     if (oled_initialization() != ESP_OK)
     {
@@ -56,6 +47,17 @@ void app_main(void)
         ESP_LOGI(TAG, "OLED display initialization successful");
     }
 
+    // initializing battery monitoring
+    if (battery_init() != ESP_OK)
+    {
+        ESP_LOGE(TAG, "battery monitoring initialization failed");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "battery monitoring initialization successful");
+    }
+
+    // initializing buzzer
     if (smart_lock_buzzer_init() != ESP_OK)
     {
         ESP_LOGE(TAG, "buzzer module initialization failed");
@@ -65,6 +67,7 @@ void app_main(void)
         ESP_LOGI(TAG, "buzzer module initialization successful");
     }
 
+    // initializing fingerprint module
     if (fingerprint_initialization() != ESP_OK)
     {
         ESP_LOGE(TAG, "fingerprint module initialization failed");
@@ -74,6 +77,7 @@ void app_main(void)
         ESP_LOGI(TAG, "fingerprint module initialization successful");
     }
 
+    // initializing PN7160 NFC module
     if (pn7160_initialization() != ESP_OK)
     {
         ESP_LOGE(TAG, "PN7160 module initialization failed");
