@@ -374,6 +374,7 @@ input[type="password"]:focus {
 	box-shadow: 0 -2px 15px rgba(0, 0, 0, 0.05);
 	z-index: 100;
 	padding: 8px 0 6px;
+	transition: opacity 0.2s ease-in-out;
 }
 
 .nav-item {

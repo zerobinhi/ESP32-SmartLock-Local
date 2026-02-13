@@ -3,14 +3,14 @@
 
 <head>
 	<meta charset="UTF-8">
-	<title>ESP32 智能门锁控制中心</title>
+	<title>ESP32智能门锁控制中心</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 	<link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 	<div class="topnav">
-		<h1>ESP32 智能门锁控制中心</h1>
+		<h1>ESP32智能门锁控制中心</h1>
 		<div class="connection-status" id="connection-status" title="连接状态"></div>
 	</div>
 	<div class="content">
@@ -22,6 +22,10 @@
 				</div>
 				<div class="card-title">设备信息</div>
 				<div class="status-item">
+					<label>当前密码</label>
+					<span class="value" id="home-current-password">-</span>
+				</div>
+				<div class="status-item">
 					<label>指纹数量</label>
 					<span class="value" id="home-fingerprint-count">-</span>
 				</div>
@@ -31,7 +35,7 @@
 				</div>
 				<div class="status-item">
 					<label>固件版本</label>
-					<span class="value" id="firmware-version">-</span>
+					<span class="value" id="home-firmware-version">-</span>
 				</div>
 			</div>
 		</div>
@@ -261,6 +265,7 @@
 						break;
 					case 'init_data':
 						updateVersion(data.version);
+						updatePassword(data.password);
 						updateCardData(data.cards);
 						updateFingerprintData(data.fingers);
 						break;
@@ -318,7 +323,11 @@
 
 		// ==================== 数据更新 ====================
 		function updateVersion(version) {
-			document.getElementById('firmware-version').textContent = `v${version}`;
+			document.getElementById('home-firmware-version').textContent = `v${version}`;
+		}
+
+		function updatePassword(password) {
+			document.getElementById('home-current-password').textContent = password;
 		}
 
 		function updateCardData(newCards) {
@@ -347,6 +356,33 @@
 			const wifiNameInput = document.getElementById('wifi-name');
 			const wifiPasswordInput = document.getElementById('wifi-password');
 			const lockPasswordInput = document.getElementById('lock-password');
+			const bottomNav = document.querySelector('.bottom-nav');
+			const originalHeight = window.innerHeight;
+
+			if (window.visualViewport) {
+				window.visualViewport.addEventListener('resize', () => {
+					// 当前可视高度
+					const currentHeight = window.visualViewport.height;
+
+					// 如果当前高度比原始高度小了 150px 以上，通常意味着键盘弹出了
+					// 这里的 150 是为了过滤掉浏览器顶部工具栏收起/展开带来的微小变化
+					if (currentHeight < originalHeight - 150) {
+						bottomNav.style.display = 'none';
+					} else {
+						// 键盘收起时，无论光标是否还在，都会触发高度恢复
+						bottomNav.style.display = 'flex';
+					}
+				});
+			} else {
+				// 兼容老旧设备：使用普通的 resize 监听
+				window.addEventListener('resize', () => {
+					if (window.innerHeight < originalHeight - 150) {
+						bottomNav.style.display = 'none';
+					} else {
+						bottomNav.style.display = 'flex';
+					}
+				});
+			}
 
 			wifiNameInput.addEventListener('input', debounce(function (e) {
 				validateWifiName(e.target);
@@ -419,10 +455,11 @@
 
 			// 设备信息
 			document.getElementById('device-info').addEventListener('click', () => {
-				const version = document.getElementById('firmware-version').textContent;
+				const password = document.getElementById('home-current-password').textContent;
+				const version = document.getElementById('home-firmware-version').textContent;
 				const fingerCount = document.getElementById('home-fingerprint-count').textContent;
 				const cardCount = document.getElementById('home-card-count').textContent;
-				showAlert(`固件版本: ${version}\n指纹数量: ${fingerCount}\n卡片数量: ${cardCount}`, '确定');
+				showAlert(`固件版本: ${version}\n指纹数量: ${fingerCount}\n卡片数量: ${cardCount}\n当前密码: ${password}`, '确定');
 			});
 
 			// 关于系统
@@ -431,12 +468,13 @@
 			});
 		}
 
+		// 保存设置函数
 		function saveSettings() {
 			const wifiName = document.getElementById('wifi-name').value;
 			const wifiPassword = document.getElementById('wifi-password').value;
 			const lockPassword = document.getElementById('lock-password').value;
 
-			// 验证
+			// 可以改成更复杂的验证规则
 			if (wifiName.length === 0) {
 				showAlert('WiFi名称不能为空', '好的');
 				return;
@@ -474,6 +512,7 @@
 			Modal.onAlertConfirm = onConfirm;
 		}
 
+		// 显示成功提示
 		function showSuccessToast(message, duration = 1500) {
 			const modal = document.getElementById('success-toast-modal');
 			const msgEl = document.getElementById('success-message');
@@ -485,6 +524,7 @@
 			}, duration);
 		}
 
+		// 显示加载中提示
 		function showLoading(message = "加载中...", duration = 5000) {
 			const modal = document.getElementById('loading-modal');
 			const msgEl = modal.querySelector('.loading-text');
@@ -500,6 +540,7 @@
 			}, duration);
 		}
 
+		// 隐藏加载中提示
 		function hideLoading() {
 			clearTimeout(loadingTimer);
 			document.getElementById('loading-modal').style.display = 'none';

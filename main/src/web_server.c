@@ -505,9 +505,9 @@ void send_init_data()
 
     // Add version number
     cJSON_AddStringToObject(root, "version", CONFIG_APP_PROJECT_VER);
-
-    cJSON_AddItemToObject(root, "cards", cards_array);
+    cJSON_AddStringToObject(root, "password", g_touch_password);
     cJSON_AddItemToObject(root, "fingers", fingers_array);
+    cJSON_AddItemToObject(root, "cards", cards_array);
     ws_broadcast_json(root);
     cJSON_Delete(root);
 }

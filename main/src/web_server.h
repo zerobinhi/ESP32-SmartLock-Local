@@ -14,7 +14,7 @@
 #define MAX_WS_CLIENTS 5
 
 extern struct fingerprint_device zw111; // Fingerprint device instance
-
+extern char g_touch_password[TOUCH_PASSWORD_LEN + 1];             // Current password
 extern uint64_t g_card_id_value[MAX_CARDS];
 extern int g_card_count;
 
