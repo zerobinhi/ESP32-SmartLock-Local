@@ -26,56 +26,56 @@ void app_main(void)
     }
 
     // initialize system components
-    ESP_LOGI(TAG, "Initializing system components...");
+    // ESP_LOGI(TAG, "Initializing system components...");
 
-    if (touch_initialization() != ESP_OK)
-    {
-        ESP_LOGE(TAG, "capacitive touch button initialization failed");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "capacitive touch button initialization successful");
-    }
+    // if (touch_initialization() != ESP_OK)
+    // {
+    //     ESP_LOGE(TAG, "capacitive touch button initialization failed");
+    // }
+    // else
+    // {
+    //     ESP_LOGI(TAG, "capacitive touch button initialization successful");
+    // }
 
-    // initializing OLED display
-    if (oled_initialization() != ESP_OK)
-    {
-        ESP_LOGE(TAG, "OLED display initialization failed");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "OLED display initialization successful");
-    }
+    // // initializing OLED display
+    // if (oled_initialization() != ESP_OK)
+    // {
+    //     ESP_LOGE(TAG, "OLED display initialization failed");
+    // }
+    // else
+    // {
+    //     ESP_LOGI(TAG, "OLED display initialization successful");
+    // }
 
-    // initializing battery monitoring
-    if (battery_init() != ESP_OK)
-    {
-        ESP_LOGE(TAG, "battery monitoring initialization failed");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "battery monitoring initialization successful");
-    }
+    // // initializing battery monitoring
+    // if (battery_init() != ESP_OK)
+    // {
+    //     ESP_LOGE(TAG, "battery monitoring initialization failed");
+    // }
+    // else
+    // {
+    //     ESP_LOGI(TAG, "battery monitoring initialization successful");
+    // }
 
-    // initializing buzzer
-    if (smart_lock_buzzer_init() != ESP_OK)
-    {
-        ESP_LOGE(TAG, "buzzer module initialization failed");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "buzzer module initialization successful");
-    }
+    // // initializing buzzer
+    // if (smart_lock_buzzer_init() != ESP_OK)
+    // {
+    //     ESP_LOGE(TAG, "buzzer module initialization failed");
+    // }
+    // else
+    // {
+    //     ESP_LOGI(TAG, "buzzer module initialization successful");
+    // }
 
-    // initializing fingerprint module
-    if (fingerprint_initialization() != ESP_OK)
-    {
-        ESP_LOGE(TAG, "fingerprint module initialization failed");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "fingerprint module initialization successful");
-    }
+    // // initializing fingerprint module
+    // if (fingerprint_initialization() != ESP_OK)
+    // {
+    //     ESP_LOGE(TAG, "fingerprint module initialization failed");
+    // }
+    // else
+    // {
+    //     ESP_LOGI(TAG, "fingerprint module initialization successful");
+    // }
 
     // initializing PN7160 NFC module
     if (pn7160_initialization() != ESP_OK)

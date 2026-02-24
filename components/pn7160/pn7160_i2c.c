@@ -15,8 +15,8 @@ bool g_i2c_service_installed = false;      // I2C service installation status
 uint64_t g_card_id_value[MAX_CARDS] = {0}; // Stored card IDs (uint64 format)
 uint8_t g_card_count = 0;                  // Number of stored cards
 
-uint16_t BytesRead;           // records number of bytes read from PN7160
-uint8_t pResponseBuffer[512]; // storage for response from PN7160
+// uint16_t BytesRead;           // records number of bytes read from PN7160
+// uint8_t pResponseBuffer[512]; // storage for response from PN7160
 
 static const char *TAG = "pn7160";
 
@@ -187,13 +187,13 @@ esp_err_t pn7160_initialization(void)
     ESP_LOG_BUFFER_HEX(TAG, NCI_PROPRIETARY_ACT_RSP, sizeof(NCI_PROPRIETARY_ACT_RSP));
     uint8_t RF_DISCOVER_MAP_CMD[19] = {0x21, 0x00, 0x10, 0x05, 0x01, 0x01, 0x01, 0x02, 0x01, 0x01, 0x03, 0x01, 0x01, 0x04, 0x01, 0x02, 0x80, 0x01, 0x80}; // RF discover map command
     i2c_master_transmit(pn7160_handle, RF_DISCOVER_MAP_CMD, sizeof(RF_DISCOVER_MAP_CMD), portMAX_DELAY);
-    xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for mapping
+    xSemaphoreTake(pn7160_semaphore, portMAX_DELAY);
     uint8_t RF_DISCOVER_MAP_RSP[4] = {0};
     i2c_master_receive(pn7160_handle, RF_DISCOVER_MAP_RSP, sizeof(RF_DISCOVER_MAP_RSP), portMAX_DELAY);
     ESP_LOGI(TAG, "pn7160 RF discover map response: %02x %02x %02x %02x", RF_DISCOVER_MAP_RSP[0], RF_DISCOVER_MAP_RSP[1], RF_DISCOVER_MAP_RSP[2], RF_DISCOVER_MAP_RSP[3]);
     uint8_t RF_DISCOVER_CMD[10] = {0x21, 0x03, 0x07, 0x03, 0x00, 0x01, 0x01, 0x01, 0x06, 0x01}; // RF discover command
     i2c_master_transmit(pn7160_handle, RF_DISCOVER_CMD, sizeof(RF_DISCOVER_CMD), portMAX_DELAY);
-    xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for discovery
+    xSemaphoreTake(pn7160_semaphore, portMAX_DELAY);
     uint8_t RF_DISCOVER_RSP[4] = {0};
     i2c_master_receive(pn7160_handle, RF_DISCOVER_RSP, sizeof(RF_DISCOVER_RSP), portMAX_DELAY);
     ESP_LOGI(TAG, "pn7160 RF discover response: %02x %02x %02x %02x", RF_DISCOVER_RSP[0], RF_DISCOVER_RSP[1], RF_DISCOVER_RSP[2], RF_DISCOVER_RSP[3]);
@@ -231,11 +231,9 @@ uint8_t find_card_id(uint64_t card_id)
 
 void pn7160_task(void *arg)
 {
-    uint8_t RF_DISCOVER_NTF[24] = {0};                       // Buffer for RF discover notification
-    uint8_t RF_DEACTIVATE_CMD[4] = {0x21, 0x06, 0x01, 0x03}; // RF deactivate command, discovery mode
-    uint8_t RF_DEACTIVATE_RSP[4] = {0};                      // Buffer for RF deactivate response
-    uint8_t RF_DEACTIVATE_NTF[5] = {0};                      // Buffer for RF deactivate notification
-    uint64_t card_id_value = 0;
+    uint8_t RF_DISCOVER_NTF[24] = {0}; // Buffer for RF discover notification
+    uint64_t card_id_value[20] = {0};  // Array to store card IDs (max 20 cards)
+    uint8_t card_count = 0;
     while (1)
     {
         if (xSemaphoreTake(pn7160_semaphore, portMAX_DELAY) == pdTRUE)
@@ -245,8 +243,9 @@ void pn7160_task(void *arg)
             // two cards successful frame:
             // 61 03 0f 01 80 00 0a 04 00 04 78 ec 86 a2 01 08 00 02
             // 61 03 0f 02 80 00 0a 04 00 04 98 8c b3 a2 01 08 00 01
-            if (i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), portMAX_DELAY) == ESP_OK)
+            if (i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(1000)) == ESP_OK)
             {
+                card_count = 1;            // Reset card count to 1 by default, will set to 2 if we find two cards in notification
                 ESP_LOGI(TAG, "Card detected");
                 ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
                 if (RF_DISCOVER_NTF[0] == 0x60 && RF_DISCOVER_NTF[1] == 0x07 && RF_DISCOVER_NTF[2] == 0x01 && RF_DISCOVER_NTF[3] == 0xa1)
@@ -256,78 +255,124 @@ void pn7160_task(void *arg)
                 }
                 if (RF_DISCOVER_NTF[12] != 0x04)
                 {
-                    ESP_LOGW(TAG, "Card ID not in expected format");
-                    xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for discovery
-                    i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), portMAX_DELAY);
+                    card_count = 2; // Two cards detected
+                    xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+                    i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(1000));
                     ESP_LOGI(TAG, "RF discover notification:");
                     ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
-                    uint8_t RF_DEACTIVATE_CMD_IDLE[4] = {0x21, 0x06, 0x01, 0x00}; // RF deactivate command, idle mode
-                    i2c_master_transmit(pn7160_handle, RF_DEACTIVATE_CMD_IDLE, sizeof(RF_DEACTIVATE_CMD_IDLE), portMAX_DELAY);
-                    xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for discovery
-                    i2c_master_receive(pn7160_handle, RF_DEACTIVATE_RSP, sizeof(RF_DEACTIVATE_RSP), portMAX_DELAY);
+                    uint8_t RF_DISCOVER_SELECT_CMD_1[6] = {0x21, 0x04, 0x03, 0x01, 0x80, 0x01}; // RF discover select command for card type 1
+                    i2c_master_transmit(pn7160_handle, RF_DISCOVER_SELECT_CMD_1, sizeof(RF_DISCOVER_SELECT_CMD_1), pdMS_TO_TICKS(1000));
+                    xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+                    uint8_t RF_DISCOVER_SELECT_RSP[4] = {0};
+                    i2c_master_receive(pn7160_handle, RF_DISCOVER_SELECT_RSP, sizeof(RF_DISCOVER_SELECT_RSP), pdMS_TO_TICKS(1000));
+                    ESP_LOGI(TAG, "RF discover select response: %02x %02x %02x %02x", RF_DISCOVER_SELECT_RSP[0], RF_DISCOVER_SELECT_RSP[1], RF_DISCOVER_SELECT_RSP[2], RF_DISCOVER_SELECT_RSP[3]);
+                    xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+                    i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(1000));
+                    ESP_LOGI(TAG, "RF discover notification:");
+                    ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
+                    for (uint8_t i = 0; i < 4; i++)
+                    {
+                        card_id_value[1] = (card_id_value[1] << 8) | RF_DISCOVER_NTF[13 + i];
+                    }
+                    uint8_t RF_DEACTIVATE_CMD_SLEEP[4] = {0x21, 0x06, 0x01, 0x01}; // RF deactivate command, sleep mode
+                    i2c_master_transmit(pn7160_handle, RF_DEACTIVATE_CMD_SLEEP, sizeof(RF_DEACTIVATE_CMD_SLEEP), pdMS_TO_TICKS(1000));
+                    xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+                    uint8_t RF_DEACTIVATE_RSP[4] = {0};
+                    i2c_master_receive(pn7160_handle, RF_DEACTIVATE_RSP, sizeof(RF_DEACTIVATE_RSP), pdMS_TO_TICKS(1000));
                     ESP_LOGI(TAG, "RF deactivate response: %02x %02x %02x %02x", RF_DEACTIVATE_RSP[0], RF_DEACTIVATE_RSP[1], RF_DEACTIVATE_RSP[2], RF_DEACTIVATE_RSP[3]);
-                    vTaskDelay(pdMS_TO_TICKS(100));                                                             // Delay before next discovery
-                    uint8_t RF_DISCOVER_CMD[10] = {0x21, 0x03, 0x07, 0x03, 0x00, 0x01, 0x01, 0x01, 0x06, 0x01}; // RF discover command
-                    i2c_master_transmit(pn7160_handle, RF_DISCOVER_CMD, sizeof(RF_DISCOVER_CMD), portMAX_DELAY);
-                    xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for discovery
-                    uint8_t RF_DISCOVER_RSP[4] = {0};
-                    i2c_master_receive(pn7160_handle, RF_DISCOVER_RSP, sizeof(RF_DISCOVER_RSP), portMAX_DELAY);
-                    ESP_LOGI(TAG, "pn7160 RF discover response: %02x %02x %02x %02x", RF_DISCOVER_RSP[0], RF_DISCOVER_RSP[1], RF_DISCOVER_RSP[2], RF_DISCOVER_RSP[3]);
-                    continue;
+                    xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+                    uint8_t RF_DEACTIVATE_NTF[5] = {0};
+                    i2c_master_receive(pn7160_handle, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF), pdMS_TO_TICKS(1000));
+                    ESP_LOGI(TAG, "RF deactivate notification:");
+                    ESP_LOG_BUFFER_HEX(TAG, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF));
+                    uint8_t RF_DISCOVER_SELECT_CMD_2[6] = {0x21, 0x04, 0x03, 0x02, 0x80, 0x01}; // RF discover select command for card type 2
+                    i2c_master_transmit(pn7160_handle, RF_DISCOVER_SELECT_CMD_2, sizeof(RF_DISCOVER_SELECT_CMD_2), pdMS_TO_TICKS(1000));
+                    xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+                    uint8_t RF_DISCOVER_SELECT_RSP_2[4] = {0};
+                    i2c_master_receive(pn7160_handle, RF_DISCOVER_SELECT_RSP_2, sizeof(RF_DISCOVER_SELECT_RSP_2), pdMS_TO_TICKS(1000));
+                    ESP_LOGI(TAG, "RF discover select response: %02x %02x %02x %02x", RF_DISCOVER_SELECT_RSP_2[0], RF_DISCOVER_SELECT_RSP_2[1], RF_DISCOVER_SELECT_RSP_2[2], RF_DISCOVER_SELECT_RSP_2[3]);
+                    xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+                    i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(1000));
+                    ESP_LOGI(TAG, "RF discover notification:");
+                    ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
                 }
-                card_id_value = 0;
+
                 for (uint8_t i = 0; i < 4; i++)
                 {
-                    card_id_value = (card_id_value << 8) | RF_DISCOVER_NTF[13 + i];
+                    card_id_value[0] = (card_id_value[0] << 8) | RF_DISCOVER_NTF[13 + i];
                 }
-                ESP_LOGI(TAG, "Card ID (uint64): 0x%llX", card_id_value);
 
-                if (g_ready_add_card == true) // Add card operation
+                for (uint8_t i = 0; i < card_count; i++)
                 {
-                    if (find_card_id(card_id_value) == 0) // New card
-                    {
-                        g_ready_add_card = false; // Reset add card flag
-
-                        g_card_id_value[g_card_count] = card_id_value;
-                        nvs_custom_set_blob(NULL, "card", "card_ids", g_card_id_value, sizeof(g_card_id_value)); // Save all card IDs
-                        g_card_count++;                                                                          // Increment card count
-                        send_operation_result("card_added", true);                                               // Send operation result
-                        nvs_custom_set_u8(NULL, "card", "count", g_card_count);
-                        ESP_LOGI(TAG, "Add card ID (uint64): 0x%llX", card_id_value);
-                        send_card_list(); // Send updated card list
-                    }
-                    else // Card already exists
-                    {
-                        g_ready_add_card = false; // Reset add card flag
-                        send_operation_result("card_added", false);
-                        ESP_LOGI(TAG, "Card already exists: 0x%llX", card_id_value);
-                    }
+                    ESP_LOGI(TAG, "Card %d ID (uint64): 0x%lX", i + 1, card_id_value[i]);
                 }
-                else // Card recognition operation
+
+                for (uint8_t i = 0; i < card_count; i++)
                 {
-                    if (find_card_id(card_id_value) == 0) // Unknown card
+                    if (g_ready_add_card == true) // Add card operation
                     {
-                        ESP_LOGI(TAG, "Unknown card: 0x%llX", card_id_value);
-                        uint8_t message = 0x00;
-                        xQueueSend(card_queue, &message, portMAX_DELAY);
+
+                        if (find_card_id(card_id_value[i]) != 0) // New card
+                        {
+                            g_ready_add_card = false; // Reset add card flag
+
+                            g_card_id_value[g_card_count] = card_id_value[i]; // Store new card ID
+                            nvs_custom_set_blob(NULL, "card", "card_ids", g_card_id_value, sizeof(g_card_id_value)); // Save all card IDs
+                            g_card_count++;                                                                          // Increment card count
+                            send_operation_result("card_added", true);                                               // Send operation result
+                            nvs_custom_set_u8(NULL, "card", "count", g_card_count);
+                            ESP_LOGI(TAG, "Add card ID (uint64): 0x%llX", card_id_value[i]);
+                            send_card_list(); // Send updated card list
+                        }
+                        else // Card already exists
+                        {
+                            g_ready_add_card = false; // Reset add card flag
+                            send_operation_result("card_added", false);
+                            ESP_LOGI(TAG, "Card already exists: 0x%llX", card_id_value[i]);
+                        }
                     }
-                    else // Recognized card
+                    else // Card recognition operation
                     {
-                        ESP_LOGI(TAG, "Recognized card: 0x%llX", card_id_value);
-                        uint8_t message = 0x01;
-                        xQueueSend(card_queue, &message, portMAX_DELAY);
+                        if (find_card_id(card_id_value[i]) == 0) // Unknown card
+                        {
+                            ESP_LOGW(TAG, "Unknown card: 0x%lX", card_id_value[i]);
+                            uint8_t message = 0x00;
+                            // xQueueSend(card_queue, &message, pdMS_TO_TICKS(1000));
+                        }
+                        else // Recognized card
+                        {
+                            ESP_LOGI(TAG, "Recognized card: 0x%llX", card_id_value[i]);
+                            uint8_t message = 0x01;
+                            // xQueueSend(card_queue, &message, pdMS_TO_TICKS(1000));
+                        }
                     }
                 }
-
-                i2c_master_transmit(pn7160_handle, RF_DEACTIVATE_CMD, sizeof(RF_DEACTIVATE_CMD), portMAX_DELAY);
-                xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for mapping
-                i2c_master_receive(pn7160_handle, RF_DEACTIVATE_RSP, sizeof(RF_DEACTIVATE_RSP), portMAX_DELAY);
-                ESP_LOGI(TAG, "RF deactivate response: %02x %02x %02x %02x", RF_DEACTIVATE_RSP[0], RF_DEACTIVATE_RSP[1], RF_DEACTIVATE_RSP[2], RF_DEACTIVATE_RSP[3]);
-                xSemaphoreTake(pn7160_semaphore, portMAX_DELAY); // Wait for mapping
-                i2c_master_receive(pn7160_handle, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF), portMAX_DELAY);
-                ESP_LOGI(TAG, "RF deactivate notification:");
-                ESP_LOG_BUFFER_HEX(TAG, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF));
             }
+            else
+            {
+                ESP_LOGE(TAG, "Failed to receive RF discover notification");
+            }
+            ESP_LOGI(TAG, "Cleared pending notifications");
+            i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(100)); // Clear any pending notifications
+            ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
+            uint8_t RF_DEACTIVATE_CMD[4] = {0x21, 0x06, 0x01, 0x00}; // RF deactivate command, idle mode
+            i2c_master_transmit(pn7160_handle, RF_DEACTIVATE_CMD, sizeof(RF_DEACTIVATE_CMD), pdMS_TO_TICKS(1000));
+            xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+            uint8_t RF_DEACTIVATE_RSP[4] = {0};
+            i2c_master_receive(pn7160_handle, RF_DEACTIVATE_RSP, sizeof(RF_DEACTIVATE_RSP), pdMS_TO_TICKS(1000));
+            ESP_LOGI(TAG, "RF deactivate response: %02x %02x %02x %02x", RF_DEACTIVATE_RSP[0], RF_DEACTIVATE_RSP[1], RF_DEACTIVATE_RSP[2], RF_DEACTIVATE_RSP[3]);
+            xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+            uint8_t RF_DEACTIVATE_NTF[5] = {0};
+            i2c_master_receive(pn7160_handle, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF), pdMS_TO_TICKS(1000));
+            ESP_LOGI(TAG, "RF deactivate notification:");
+            ESP_LOG_BUFFER_HEX(TAG, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF));
+            vTaskDelay(pdMS_TO_TICKS(100));                                                             // Delay before next discovery
+            uint8_t RF_DISCOVER_CMD[10] = {0x21, 0x03, 0x07, 0x03, 0x00, 0x01, 0x01, 0x01, 0x06, 0x01}; // RF discover command
+            i2c_master_transmit(pn7160_handle, RF_DISCOVER_CMD, sizeof(RF_DISCOVER_CMD), pdMS_TO_TICKS(1000));
+            uint8_t RF_DISCOVER_RSP[4] = {0};
+            xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
+            i2c_master_receive(pn7160_handle, RF_DISCOVER_RSP, sizeof(RF_DISCOVER_RSP), pdMS_TO_TICKS(1000));
+            ESP_LOGI(TAG, "pn7160 RF discover response: %02x %02x %02x %02x", RF_DISCOVER_RSP[0], RF_DISCOVER_RSP[1], RF_DISCOVER_RSP[2], RF_DISCOVER_RSP[3]);
         }
     }
 }

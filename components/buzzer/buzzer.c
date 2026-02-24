@@ -81,12 +81,8 @@ void fingerprint_send_buzzer_message(void *pvParameters)
     uint8_t message; // 0=failure, 1=success
     while (1)
     {
-        // Fix: receive message from fingerprint-specific queue (original code fine, adding timeout log)
-        BaseType_t xRecvRet = xQueueReceive(
-            fingerprint_queue,
-            &message,
-            portMAX_DELAY // Block indefinitely until message arrives (matches waiting for fingerprint trigger)
-        );
+        // receive message from fingerprint-specific queue (original code fine, adding timeout log)
+        BaseType_t xRecvRet = xQueueReceive(fingerprint_queue, &message, portMAX_DELAY);
 
         if (xRecvRet == pdTRUE)
         {
@@ -125,7 +121,7 @@ void password_send_buzzer_message(void *pvParameters)
     uint8_t message; // 0=failure, 1=success
     while (1)
     {
-        // Fix: receive message from password-specific queue
+        // receive message from password-specific queue
         BaseType_t xRecvRet = xQueueReceive(password_queue, &message, portMAX_DELAY);
 
         if (xRecvRet == pdTRUE)
@@ -164,7 +160,7 @@ void card_send_buzzer_message(void *pvParameters)
     uint8_t message; // 0=failure, 1=success
     while (1)
     {
-        // Fix: receive message from card-specific queue
+        // receive message from card-specific queue
         BaseType_t xRecvRet = xQueueReceive(card_queue, &message, portMAX_DELAY);
 
         if (xRecvRet == pdTRUE)
