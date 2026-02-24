@@ -943,7 +943,7 @@ void uart_task(void *pvParameters)
     static uint8_t dtmp[1024];
     while (1)
     {
-        if (xQueueReceive(uart2_queue, (void *)&event, portMAX_DELAY))
+        if (xQueueReceive(uart2_queue, (void *)&event, portMAX_DELAY) == pdTRUE)
         {
             bzero(dtmp, 1024);
             size_t buffered_size;

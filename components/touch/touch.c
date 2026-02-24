@@ -129,7 +129,7 @@ static void touch_key_task(void *arg)
 
     while (1)
     {
-        if (xQueueReceive(touch_key_queue, &key, portMAX_DELAY))
+        if (xQueueReceive(touch_key_queue, &key, portMAX_DELAY) == pdTRUE)
         {
             ESP_LOGI(TAG, "Key pressed: %c", key);
 
@@ -156,13 +156,13 @@ static void touch_key_task(void *arg)
                     {
                         ESP_LOGI(TAG, "Password verification OK");
                         uint8_t message = 0x01; // Success
-                        xQueueSend(password_queue, &message, portMAX_DELAY);
+                        xQueueSend(password_queue, &message, pdMS_TO_TICKS(1000));
                     }
                     else
                     {
                         ESP_LOGW(TAG, "Password verification FAILED");
                         uint8_t message = 0x00; // Failure
-                        xQueueSend(password_queue, &message, portMAX_DELAY);
+                        xQueueSend(password_queue, &message, pdMS_TO_TICKS(1000));
                     }
                 }
                 else

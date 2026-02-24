@@ -111,18 +111,16 @@ esp_err_t pn7160_initialization(void)
     ESP_LOGI(TAG, "PN7160 INT pin ISR handler added");
 
     /* Load card data from NVS */
-    esp_err_t err = nvs_custom_get_u8(NULL, "card", "count", &g_card_count);
-    if (err != ESP_OK)
-    {
-        ESP_LOGW(TAG, "No card data found in NVS");
-        g_card_count = 0;
-    }
-    else
+    if (nvs_custom_get_u8(NULL, "card", "count", &g_card_count) == ESP_OK)
     {
         size_t size = sizeof(g_card_id_value);
         nvs_custom_get_blob(NULL, "card", "card_ids", g_card_id_value, &size);
-
         ESP_LOGI(TAG, "Loaded %d cards from NVS", g_card_count);
+    }
+    else
+    {
+        ESP_LOGW(TAG, "No card data found in NVS");
+        g_card_count = 0;
     }
 
     /* Hardware reset PN7160 */
@@ -245,7 +243,7 @@ void pn7160_task(void *arg)
             // 61 03 0f 02 80 00 0a 04 00 04 98 8c b3 a2 01 08 00 01
             if (i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(1000)) == ESP_OK)
             {
-                card_count = 1;            // Reset card count to 1 by default, will set to 2 if we find two cards in notification
+                card_count = 1; // Reset card count to 1 by default, will set to 2 if we find two cards in notification
                 ESP_LOGI(TAG, "Card detected");
                 ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
                 if (RF_DISCOVER_NTF[0] == 0x60 && RF_DISCOVER_NTF[1] == 0x07 && RF_DISCOVER_NTF[2] == 0x01 && RF_DISCOVER_NTF[3] == 0xa1)
@@ -253,7 +251,7 @@ void pn7160_task(void *arg)
                     ESP_LOGW(TAG, "Card detection failed");
                     continue;
                 }
-                if (RF_DISCOVER_NTF[12] != 0x04)
+                if (RF_DISCOVER_NTF[0] == 0x61 && RF_DISCOVER_NTF[1] == 0x03 && RF_DISCOVER_NTF[2] == 0x0f)
                 {
                     card_count = 2; // Two cards detected
                     xSemaphoreTake(pn7160_semaphore, pdMS_TO_TICKS(1000));
@@ -270,6 +268,7 @@ void pn7160_task(void *arg)
                     i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(1000));
                     ESP_LOGI(TAG, "RF discover notification:");
                     ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
+                    card_id_value[1] = 0;
                     for (uint8_t i = 0; i < 4; i++)
                     {
                         card_id_value[1] = (card_id_value[1] << 8) | RF_DISCOVER_NTF[13 + i];
@@ -297,6 +296,7 @@ void pn7160_task(void *arg)
                     ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
                 }
 
+                card_id_value[0] = 0;
                 for (uint8_t i = 0; i < 4; i++)
                 {
                     card_id_value[0] = (card_id_value[0] << 8) | RF_DISCOVER_NTF[13 + i];
@@ -304,7 +304,7 @@ void pn7160_task(void *arg)
 
                 for (uint8_t i = 0; i < card_count; i++)
                 {
-                    ESP_LOGI(TAG, "Card %d ID (uint64): 0x%lX", i + 1, card_id_value[i]);
+                    ESP_LOGI(TAG, "Card %d ID (uint64): 0x%llX", i + 1, card_id_value[i]);
                 }
 
                 for (uint8_t i = 0; i < card_count; i++)
@@ -312,11 +312,9 @@ void pn7160_task(void *arg)
                     if (g_ready_add_card == true) // Add card operation
                     {
 
-                        if (find_card_id(card_id_value[i]) != 0) // New card
+                        if (find_card_id(card_id_value[i]) == 0) // Card not found, can be added
                         {
-                            g_ready_add_card = false; // Reset add card flag
-
-                            g_card_id_value[g_card_count] = card_id_value[i]; // Store new card ID
+                            g_card_id_value[g_card_count] = card_id_value[i];                                        // Store new card ID
                             nvs_custom_set_blob(NULL, "card", "card_ids", g_card_id_value, sizeof(g_card_id_value)); // Save all card IDs
                             g_card_count++;                                                                          // Increment card count
                             send_operation_result("card_added", true);                                               // Send operation result
@@ -326,7 +324,6 @@ void pn7160_task(void *arg)
                         }
                         else // Card already exists
                         {
-                            g_ready_add_card = false; // Reset add card flag
                             send_operation_result("card_added", false);
                             ESP_LOGI(TAG, "Card already exists: 0x%llX", card_id_value[i]);
                         }
@@ -335,17 +332,18 @@ void pn7160_task(void *arg)
                     {
                         if (find_card_id(card_id_value[i]) == 0) // Unknown card
                         {
-                            ESP_LOGW(TAG, "Unknown card: 0x%lX", card_id_value[i]);
+                            ESP_LOGW(TAG, "Unknown Card ID (uint64): 0x%llX", card_id_value[i]);
                             uint8_t message = 0x00;
-                            // xQueueSend(card_queue, &message, pdMS_TO_TICKS(1000));
+                            xQueueSend(card_queue, &message, pdMS_TO_TICKS(1000));
                         }
                         else // Recognized card
                         {
                             ESP_LOGI(TAG, "Recognized card: 0x%llX", card_id_value[i]);
                             uint8_t message = 0x01;
-                            // xQueueSend(card_queue, &message, pdMS_TO_TICKS(1000));
+                            xQueueSend(card_queue, &message, pdMS_TO_TICKS(1000));
                         }
                     }
+                    g_ready_add_card = false; // Reset add card flag
                 }
             }
             else

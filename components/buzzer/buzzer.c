@@ -92,7 +92,7 @@ void fingerprint_send_buzzer_message(void *pvParameters)
                 ESP_LOGI(TAG, "Fingerprint verified successfully");
 
                 // Send "success" signal to buzzer queue
-                if (xQueueSend(buzzer_queue, &message, portMAX_DELAY) != pdTRUE)
+                if (xQueueSend(buzzer_queue, &message, pdMS_TO_TICKS(1000)) != pdTRUE)
                 {
                     ESP_LOGE(TAG, "Failed to send success message to buzzer queue (fingerprint)");
                 }
@@ -103,7 +103,7 @@ void fingerprint_send_buzzer_message(void *pvParameters)
                 ESP_LOGW(TAG, "Fingerprint verification failed");
 
                 // Send "failure" signal to buzzer queue
-                if (xQueueSend(buzzer_queue, &message, portMAX_DELAY) != pdTRUE)
+                if (xQueueSend(buzzer_queue, &message, pdMS_TO_TICKS(1000)) != pdTRUE)
                 {
                     ESP_LOGE(TAG, "Failed to send fail message to buzzer queue (fingerprint)");
                 }
@@ -132,7 +132,7 @@ void password_send_buzzer_message(void *pvParameters)
                 ESP_LOGI(TAG, "Password verified successfully");
 
                 // Send "success" signal to buzzer queue
-                if (xQueueSend(buzzer_queue, &message, portMAX_DELAY) != pdTRUE)
+                if (xQueueSend(buzzer_queue, &message, pdMS_TO_TICKS(1000)) != pdTRUE)
                 {
                     ESP_LOGE(TAG, "Failed to send success message to buzzer queue (password)");
                 }
@@ -146,7 +146,7 @@ void password_send_buzzer_message(void *pvParameters)
                 ESP_LOGW(TAG, "Password verification failed");
 
                 // Send "failure" signal to buzzer queue
-                if (xQueueSend(buzzer_queue, &message, portMAX_DELAY) != pdTRUE)
+                if (xQueueSend(buzzer_queue, &message, pdMS_TO_TICKS(1000)) != pdTRUE)
                 {
                     ESP_LOGE(TAG, "Failed to send fail message to buzzer queue (password)");
                 }
@@ -171,7 +171,7 @@ void card_send_buzzer_message(void *pvParameters)
                 ESP_LOGI(TAG, "Card verified successfully");
 
                 // Send "success" signal to buzzer queue
-                if (xQueueSend(buzzer_queue, &message, portMAX_DELAY) != pdTRUE)
+                if (xQueueSend(buzzer_queue, &message, pdMS_TO_TICKS(1000)) != pdTRUE)
                 {
                     ESP_LOGE(TAG, "Failed to send success message to buzzer queue (card)");
                 }
@@ -185,7 +185,7 @@ void card_send_buzzer_message(void *pvParameters)
                 ESP_LOGW(TAG, "Card verification failed");
 
                 // Send "failure" signal to buzzer queue
-                if (xQueueSend(buzzer_queue, &message, portMAX_DELAY) != pdTRUE)
+                if (xQueueSend(buzzer_queue, &message, pdMS_TO_TICKS(1000)) != pdTRUE)
                 {
                     ESP_LOGE(TAG, "Failed to send fail message to buzzer queue (card)");
                 }
@@ -210,7 +210,7 @@ void app_send_buzzer_message(void *pvParameters)
                 ESP_LOGI(TAG, "APP remote unlock succeeded");
 
                 // Send "success" signal to buzzer queue
-                if (xQueueSend(buzzer_queue, &message, portMAX_DELAY) != pdTRUE)
+                if (xQueueSend(buzzer_queue, &message, pdMS_TO_TICKS(1000)) != pdTRUE)
                 {
                     ESP_LOGE(TAG, "Failed to send success message to buzzer queue (APP)");
                 }
@@ -224,7 +224,7 @@ void app_send_buzzer_message(void *pvParameters)
                 ESP_LOGW(TAG, "APP remote unlock failed");
 
                 // Send "failure" signal to buzzer queue
-                if (xQueueSend(buzzer_queue, &message, portMAX_DELAY) != pdTRUE)
+                if (xQueueSend(buzzer_queue, &message, pdMS_TO_TICKS(1000)) != pdTRUE)
                 {
                     ESP_LOGE(TAG, "Failed to send fail message to buzzer queue (APP)");
                 }
