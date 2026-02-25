@@ -14,8 +14,7 @@ bool g_ready_delete_fingerprint = false;
 bool g_ready_delete_all_fingerprint = false;
 bool g_ready_add_card = false;
 bool g_ready_delete_card = false;
-char g_add_card_number[9] = {0};
-char g_delete_card_number[9] = {0};
+uint64_t g_delete_card_number = 0;
 uint8_t g_deleteFingerprintID = 0;
 
 httpd_handle_t server = NULL;
@@ -293,28 +292,27 @@ static esp_err_t ws_handler(httpd_req_t *req)
     else if (strstr(recv_buf, "delete_card:") != NULL)
     {
         char *prefix = "delete_card:";
-        strncpy(g_delete_card_number, recv_buf + strlen(prefix), sizeof(g_delete_card_number) - 1);
-        g_delete_card_number[sizeof(g_delete_card_number) - 1] = '\0';
-        ESP_LOGI(TAG, "Processing delete specified card command, card number: %s", g_delete_card_number);
+        g_delete_card_number = atoi(recv_buf + strlen(prefix));
+        ESP_LOGI(TAG, "Processing delete specified card command, card number: %llx", g_delete_card_number);
 
-        g_ready_delete_card = true; // todo
-        // for (uint8_t i = 0; i < g_card_count; i++)
-        // {
-        //     if (strcmp(g_delete_card_number, g_card_id_value[i]) == 0)
-        //     {
-        //         // Find matching item, delete card
-        //         for (uint8_t j = i; j < g_card_count - 1; j++)
-        //         {
-        //             g_card_id_value[j] = g_card_id_value[j + 1];
-        //             strcpy(g_card_id_value[j], g_card_id_value[j + 1]);
-        //         }
-        //         g_card_count--;
-        //         nvs_custom_set_u8(NULL, "card", "count", g_card_count);
-        //         send_operation_result("card_deleted", true); // Send operation result
-        //         ESP_LOGI(TAG, "Card %s deleted successfully", g_delete_card_number);
-        //         break;
-        //     }
-        // }
+        g_ready_delete_card = true;
+        for (uint8_t i = 0; i < g_card_count; i++)
+        {
+            if (g_card_id_value[i] == g_delete_card_number)
+            {
+                // Find matching item, delete card
+                for (uint8_t j = i; j < g_card_count - 1; j++)
+                {
+                    g_card_id_value[j] = g_card_id_value[j + 1];
+                }
+                g_card_count--;
+                nvs_custom_set_u8(NULL, "card", "count", g_card_count);
+                send_operation_result("card_deleted", true); // Send operation result
+                send_card_list();                            // Send updated card list
+                ESP_LOGI(TAG, "Card %llx deleted successfully", g_delete_card_number);
+                break;
+            }
+        }
     }
     else if (strcmp(recv_buf, "add_fingerprint") == 0)
     {
@@ -330,7 +328,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
             else
             {
                 zw111.state = 0x02;    // Set state to enroll fingerprint state
-                turn_on_fingerprint(); // Power on!
+                turn_on_fingerprint(); // Power on
             }
         }
         else
@@ -362,7 +360,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         else
         {
             zw111.state = 0x03;    // Set state to delete fingerprint state
-            turn_on_fingerprint(); // Power on!
+            turn_on_fingerprint(); // Power on
         }
     }
     else if (strcmp(recv_buf, "refresh_cards") == 0)
@@ -388,7 +386,38 @@ static esp_err_t ws_handler(httpd_req_t *req)
         else
         {
             zw111.state = 0x03;    // Set state to delete fingerprint state
-            turn_on_fingerprint(); // Power on!
+            turn_on_fingerprint(); // Power on
+        }
+    }
+    else if (strncmp(recv_buf, "save_settings:", 14) == 0)
+    {
+        ESP_LOGI(TAG, "Processing save settings command");
+
+        char *params = recv_buf + 14;
+
+        char param1[32] = {0};
+        char param2[64] = {0};
+        char param3[TOUCH_PASSWORD_LEN + 1] = {0};
+
+        int parsed = sscanf(params, "%31[^,],%63[^,],%6s", param1, param2, param3);
+
+        if (parsed == 3)
+        {
+            ESP_LOGI(TAG, "Parsed settings: %s, %s, %s", param1, param2, param3);
+            memset(g_ap_ssid, 0, sizeof(g_ap_ssid));
+            memset(g_ap_pass, 0, sizeof(g_ap_pass));
+            memset(g_touch_password, 0, sizeof(g_touch_password));
+            strcpy(g_ap_ssid, param1);
+            strcpy(g_ap_pass, param2);
+            strcpy(g_touch_password, param3);
+            nvs_custom_set_str(NULL, "wifi", "wifi_ssid", param1);
+            nvs_custom_set_str(NULL, "wifi", "wifi_pass", param2);
+            nvs_custom_set_str(NULL, "NVS_TOUCH", "touch_password", param3);
+            send_operation_result("settings_saved", true); // Send operation result
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Invalid save_settings format");
         }
     }
     else if (ws_pkt.len > 0)

@@ -464,7 +464,7 @@
 
 			// 关于系统
 			document.getElementById('about-system').addEventListener('click', () => {
-				showAlert('ESP32智能门锁系统\n版本: 1.0.0\n© 2024 All Rights Reserved', '确定');
+				showAlert('ESP32智能门锁系统\n© 2026 All Rights Reserved', '确定');
 			});
 		}
 
@@ -658,7 +658,7 @@
 					}
 				});
 			},
-			// 更新卡片列表（使用DocumentFragment优化性能）
+			// 更新卡片列表
 			updateCardList() {
 				const container = document.getElementById('card-list-container');
 				container.innerHTML = '';
@@ -680,7 +680,9 @@
 					item.innerHTML = `
 						<div class="content">
 							<span>卡片 #${index + 1}</span>
-							<span style="font-size: 0.8rem; color: #666;">卡号: ${card.cardNumber}</span>
+							<span style="font-size: 0.8rem; color: #666;">
+								卡号: ${card.cardNumber.toString(16).toUpperCase().padStart(8, '0')}
+							</span>
 						</div>
 						<button class="delete-btn" data-id="${card.cardNumber}">删除</button>
 					`;

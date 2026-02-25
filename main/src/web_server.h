@@ -13,6 +13,8 @@
 #define WS_RECV_BUFFER_SIZE 128
 #define MAX_WS_CLIENTS 5
 
+extern char g_ap_ssid[32];
+extern char g_ap_pass[64];
 extern struct fingerprint_device zw111; // Fingerprint device instance
 extern char g_touch_password[TOUCH_PASSWORD_LEN + 1];             // Current password
 extern uint64_t g_card_id_value[MAX_CARDS];

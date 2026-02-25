@@ -19,9 +19,7 @@
 extern i2c_master_dev_handle_t pn7160_handle;
 extern bool g_ready_add_card;
 extern bool g_ready_delete_card;
-extern char g_add_card_number[9];
-extern char g_delete_card_number[9];
-extern uint8_t way_to_open;
+extern char g_delete_card_number;
 extern QueueHandle_t card_queue; 
 extern void send_card_list();                                         // send updated card list to front end
 extern void send_operation_result(const char *message, bool success); // send operation result to front end
