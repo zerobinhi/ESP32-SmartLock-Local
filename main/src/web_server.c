@@ -226,7 +226,11 @@ static esp_err_t ws_handler(httpd_req_t *req)
             }
         }
 
-        send_init_data();
+        if (ws_client_count != 0)
+        {
+            send_init_data();
+        }
+
         return ESP_OK;
     }
 
@@ -289,7 +293,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "Processing cancel add card command");
         g_ready_add_card = false;
     }
-    else if (strstr(recv_buf, "delete_card:") != NULL)
+    else if (strncmp(recv_buf, "delete_card:", 12) == 0)
     {
         char *prefix = "delete_card:";
         g_delete_card_number = atoi(recv_buf + strlen(prefix));
@@ -373,7 +377,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "Processing refresh fingerprint list command");
         send_fingerprint_list();
     }
-    else if (strstr(recv_buf, "delete_fingerprint:") != NULL)
+    else if (strncmp(recv_buf, "delete_fingerprint:", 19) == 0)
     {
         char *prefix = "delete_fingerprint:";
         g_deleteFingerprintID = atoi(recv_buf + strlen(prefix));
@@ -404,12 +408,12 @@ static esp_err_t ws_handler(httpd_req_t *req)
         if (parsed == 3)
         {
             ESP_LOGI(TAG, "Parsed settings: %s, %s, %s", param1, param2, param3);
-            memset(g_ap_ssid, 0, sizeof(g_ap_ssid));
-            memset(g_ap_pass, 0, sizeof(g_ap_pass));
-            memset(g_touch_password, 0, sizeof(g_touch_password));
-            strcpy(g_ap_ssid, param1);
-            strcpy(g_ap_pass, param2);
-            strcpy(g_touch_password, param3);
+            strncpy(g_ap_ssid, param1, sizeof(g_ap_ssid) - 1);
+            strncpy(g_ap_pass, param2, sizeof(g_ap_pass) - 1);
+            strncpy(g_touch_password, param3, sizeof(g_touch_password) - 1);
+            g_ap_ssid[sizeof(g_ap_ssid) - 1] = '\0';
+            g_ap_pass[sizeof(g_ap_pass) - 1] = '\0';
+            g_touch_password[sizeof(g_touch_password) - 1] = '\0';
             nvs_custom_set_str(NULL, "wifi", "wifi_ssid", param1);
             nvs_custom_set_str(NULL, "wifi", "wifi_pass", param2);
             nvs_custom_set_str(NULL, "NVS_TOUCH", "touch_password", param3);
