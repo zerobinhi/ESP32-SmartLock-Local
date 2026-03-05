@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <esp_err.h>
 #include <esp_log.h>
+#include <esp_sleep.h>
 
 #define DEFAULT_AP_SSID "ESP32-SmartLock"
 #define DEFAULT_AP_PASS "12345678"

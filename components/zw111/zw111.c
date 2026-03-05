@@ -856,6 +856,9 @@ esp_err_t fingerprint_initialization()
         .intr_type = GPIO_INTR_POSEDGE};
     gpio_config(&zw111_int_gpio_config);
 
+    gpio_wakeup_enable(FINGERPRINT_INT_PIN, GPIO_INTR_HIGH_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+
     gpio_config_t fingerprint_ctl_gpio_config = {
         .pin_bit_mask = (1ULL << FINGERPRINT_CTL_PIN),
         .mode = GPIO_MODE_OUTPUT,

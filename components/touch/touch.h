@@ -7,7 +7,7 @@
 #include "nvs_custom.h"
 #include "app_config.h"
 
-#define TOUCH_THRESH2BM_RATIO 0.1f
+#define TOUCH_THRESH2BM_RATIO 0.4f
 extern QueueHandle_t password_queue;
 
 esp_err_t touch_initialization(void);

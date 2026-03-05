@@ -51,11 +51,35 @@ QueueHandle_t touch_key_queue = NULL; // Touch key event queue
 char g_touch_password[TOUCH_PASSWORD_LEN + 1]; // Stored password
 char g_input_password[TOUCH_PASSWORD_LEN + 1]; // Current input buffer
 uint8_t g_input_len = 0;
+static bool g_touch_wakeup_flag = false;
 
+static void power_sleep_task(void *arg)
+{
+    while (1)
+    {
+        ESP_LOGI(TAG, "System idle, preparing to sleep...");
+
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        g_touch_wakeup_flag = true;
+
+        esp_light_sleep_start();
+
+        esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+
+        if (cause == ESP_SLEEP_WAKEUP_TOUCHPAD)
+        {
+            ESP_LOGI(TAG, "Wakeup by touch");
+        }
+        else if (cause == ESP_SLEEP_WAKEUP_GPIO)
+        {
+            ESP_LOGI(TAG, "Wakeup by fingerprint GPIO");
+        }
+    }
+}
 // Map touch channel ID to corresponding key character
 static char touch_key_from_channel(uint8_t ch)
 {
-    for (int i = 0; i < sizeof(touch_keys); i++)
+    for (int i = 0; i < sizeof(touch_keys) / sizeof(touch_keys[0]); i++)
     {
         if (touch_channels[i] == ch)
         {
@@ -65,9 +89,15 @@ static char touch_key_from_channel(uint8_t ch)
     return 0;
 }
 
-// Touch active callback (ISR context)
+// Touch active callback
 static bool on_touch_active(touch_sensor_handle_t sens, const touch_active_event_data_t *event, void *arg)
 {
+    if (g_touch_wakeup_flag)
+    {
+        g_touch_wakeup_flag = false;
+        ESP_EARLY_LOGI(TAG, "Ignore first touch after wakeup");
+        return false;
+    }
     char key = touch_key_from_channel(event->chan_id);
     if (!key)
     {
@@ -80,7 +110,7 @@ static bool on_touch_active(touch_sensor_handle_t sens, const touch_active_event
     return xHigherPriorityTaskWoken == pdTRUE;
 }
 
-// Touch inactive callback (unused)
+// Touch inactive callback
 static bool on_touch_inactive(touch_sensor_handle_t sens, const touch_inactive_event_data_t *event, void *arg)
 {
     return false;
@@ -99,7 +129,7 @@ static void do_initial_scanning(touch_sensor_handle_t sens, touch_channel_handle
 
     touch_sensor_disable(sens);
 
-    for (int i = 0; i < sizeof(touch_keys); i++)
+    for (int i = 0; i < sizeof(touch_keys) / sizeof(touch_keys[0]); i++)
     {
         uint32_t bm[1] = {};
         touch_channel_config_t cfg = {
@@ -211,7 +241,7 @@ esp_err_t touch_initialization(void)
     }
 
     touch_sensor_handle_t sens = NULL;
-    touch_channel_handle_t ch[sizeof(touch_keys)];
+    touch_channel_handle_t ch[sizeof(touch_keys) / sizeof(touch_keys[0])];
 
     // Create touch controller
     touch_sensor_sample_config_t sample_cfg[1] = {
@@ -223,7 +253,7 @@ esp_err_t touch_initialization(void)
     ESP_ERROR_CHECK(touch_sensor_new_controller(&sens_cfg, &sens));
 
     // Create touch channels
-    for (int i = 0; i < sizeof(touch_keys); i++)
+    for (int i = 0; i < sizeof(touch_keys) / sizeof(touch_keys[0]); i++)
     {
         touch_channel_config_t cfg = {
             .active_thresh = {2000},
@@ -254,6 +284,10 @@ esp_err_t touch_initialization(void)
     };
     touch_sensor_register_callbacks(sens, &cb, NULL);
 
+    //  Configure sleep wakeup
+    touch_sleep_config_t slp_cfg = TOUCH_SENSOR_DEFAULT_LSLP_CONFIG();
+    touch_sensor_config_sleep_wakeup(sens, &slp_cfg);
+
     // Start continuous scanning
     touch_sensor_enable(sens);
     touch_sensor_start_continuous_scanning(sens);
@@ -261,6 +295,10 @@ esp_err_t touch_initialization(void)
     ESP_LOGI(TAG, "Touch driver initialized (12 keys)");
 
     touch_password_init();
+
+    ESP_LOGI(TAG, "Starting power sleep task");
+
+    xTaskCreate(power_sleep_task, "power_sleep_task", 4096, NULL, 10, NULL);
 
     return ESP_OK;
 }
