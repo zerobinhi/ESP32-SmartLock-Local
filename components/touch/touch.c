@@ -59,7 +59,7 @@ static void power_sleep_task(void *arg)
     {
         ESP_LOGI(TAG, "System idle, preparing to sleep...");
 
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(60000));
         g_touch_wakeup_flag = true;
 
         esp_light_sleep_start();
@@ -73,6 +73,7 @@ static void power_sleep_task(void *arg)
         else if (cause == ESP_SLEEP_WAKEUP_GPIO)
         {
             ESP_LOGI(TAG, "Wakeup by fingerprint GPIO");
+
         }
     }
 }

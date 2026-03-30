@@ -28,14 +28,9 @@ static const char *TAG = "pn7160";
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
     uint32_t gpio_num = (uint32_t)arg;
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     if (gpio_num == PN7160_INT_PIN)
     {
-        xSemaphoreGiveFromISR(pn7160_semaphore, &xHigherPriorityTaskWoken);
-    }
-    if (xHigherPriorityTaskWoken)
-    {
-        portYIELD_FROM_ISR();
+        xSemaphoreGiveFromISR(pn7160_semaphore, NULL);
     }
 }
 
@@ -80,7 +75,7 @@ esp_err_t pn7160_initialization(void)
     ESP_LOGI(TAG, "PN7160 device added");
 
     /* Configure reset pin */
-    gpio_config_t rst_cfg = {
+    gpio_config_t pn7160_rst_cfg = {
         .pin_bit_mask = (1ULL << PN7160_RST_PIN),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
@@ -88,7 +83,7 @@ esp_err_t pn7160_initialization(void)
         .intr_type = GPIO_INTR_DISABLE,
     };
 
-    gpio_config(&rst_cfg);
+    gpio_config(&pn7160_rst_cfg);
 
     /* Configure interrupt pin*/
     gpio_config_t pn7160_irq_cfg = {
@@ -349,7 +344,9 @@ void pn7160_task(void *arg)
             else
             {
                 ESP_LOGE(TAG, "Failed to receive RF discover notification");
+                vTaskDelay(pdMS_TO_TICKS(500));  
             }
+            
             ESP_LOGI(TAG, "Cleared pending notifications");
             i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(100)); // Clear any pending notifications
             ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
@@ -364,7 +361,9 @@ void pn7160_task(void *arg)
             i2c_master_receive(pn7160_handle, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF), pdMS_TO_TICKS(1000));
             ESP_LOGI(TAG, "RF deactivate notification:");
             ESP_LOG_BUFFER_HEX(TAG, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF));
-            vTaskDelay(pdMS_TO_TICKS(100));                                                             // Delay before next discovery
+            gpio_intr_disable(PN7160_INT_PIN);
+            vTaskDelay(pdMS_TO_TICKS(500));                                                             // Delay before next discovery
+            gpio_intr_enable(PN7160_INT_PIN);
             uint8_t RF_DISCOVER_CMD[10] = {0x21, 0x03, 0x07, 0x03, 0x00, 0x01, 0x01, 0x01, 0x06, 0x01}; // RF discover command
             i2c_master_transmit(pn7160_handle, RF_DISCOVER_CMD, sizeof(RF_DISCOVER_CMD), pdMS_TO_TICKS(1000));
             uint8_t RF_DISCOVER_RSP[4] = {0};
