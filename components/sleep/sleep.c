@@ -132,20 +132,9 @@ void notify_user_activity(void)
 
 esp_err_t sleep_initialization(void)
 {
-    esp_err_t err = nvs_custom_get_u8(NULL, "sleep", "sleep_time", &g_sleep_time);
+    g_sleep_time = DEFAULT_SLEEP_TIME;
 
-    if (err == ESP_ERR_NVS_NOT_FOUND)
-    {
-        ESP_LOGW(TAG, "sleep time not found, using default");
-
-        g_sleep_time = DEFAULT_SLEEP_TIME;
-
-        nvs_custom_set_u8(NULL, "sleep", "sleep_time", g_sleep_time);
-    }
-    else
-    {
-        ESP_LOGI(TAG, "sleep time loaded from NVS");
-    }
+    ESP_LOGI(TAG, "sleep time initialized to %d s", g_sleep_time);
 
     g_last_activity_time = esp_timer_get_time();
 

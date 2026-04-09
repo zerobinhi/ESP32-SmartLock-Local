@@ -296,7 +296,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     else if (strncmp(recv_buf, "delete_card:", 12) == 0)
     {
         char *prefix = "delete_card:";
-        g_delete_card_number = atoi(recv_buf + strlen(prefix));
+        g_delete_card_number = strtoull(recv_buf + strlen(prefix), NULL, 10);
         ESP_LOGI(TAG, "Processing delete specified card command, card number: %llx", g_delete_card_number);
 
         g_ready_delete_card = true;

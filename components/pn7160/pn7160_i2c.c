@@ -249,6 +249,11 @@ void pn7160_task(void *arg)
                     ESP_LOGW(TAG, "Card detection failed");
                     continue;
                 }
+                if (RF_DISCOVER_NTF[0] == 0x61 && RF_DISCOVER_NTF[1] == 0x23 && RF_DISCOVER_NTF[2] == 0x00)
+                {
+                    ESP_LOGW(TAG, "Card detection failed");
+                    continue;
+                }
                 if (RF_DISCOVER_NTF[0] == 0x61 && RF_DISCOVER_NTF[1] == 0x03 && RF_DISCOVER_NTF[2] == 0x0f)
                 {
                     card_count = 2; // Two cards detected
@@ -347,9 +352,9 @@ void pn7160_task(void *arg)
             else
             {
                 ESP_LOGE(TAG, "Failed to receive RF discover notification");
-                vTaskDelay(pdMS_TO_TICKS(500));  
+                vTaskDelay(pdMS_TO_TICKS(500));
             }
-            
+
             ESP_LOGI(TAG, "Cleared pending notifications");
             i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(100)); // Clear any pending notifications
             ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));
@@ -365,7 +370,7 @@ void pn7160_task(void *arg)
             ESP_LOGI(TAG, "RF deactivate notification:");
             ESP_LOG_BUFFER_HEX(TAG, RF_DEACTIVATE_NTF, sizeof(RF_DEACTIVATE_NTF));
             gpio_intr_disable(PN7160_INT_PIN);
-            vTaskDelay(pdMS_TO_TICKS(500));                                                             // Delay before next discovery
+            vTaskDelay(pdMS_TO_TICKS(500)); // Delay before next discovery
             gpio_intr_enable(PN7160_INT_PIN);
             uint8_t RF_DISCOVER_CMD[10] = {0x21, 0x03, 0x07, 0x03, 0x00, 0x01, 0x01, 0x01, 0x06, 0x01}; // RF discover command
             i2c_master_transmit(pn7160_handle, RF_DISCOVER_CMD, sizeof(RF_DISCOVER_CMD), pdMS_TO_TICKS(1000));

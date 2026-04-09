@@ -42,7 +42,7 @@
 
 #define TOUCH_PASSWORD_LEN 6
 #define DEFAULT_PASSWORD "123456"
-#define DEFAULT_SLEEP_TIME 10
+#define DEFAULT_SLEEP_TIME 60
 
 #define true 1
 #define false 0

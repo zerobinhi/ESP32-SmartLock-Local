@@ -65,12 +65,12 @@ esp_err_t gpio_initialization(void)
     gpio_config(&buzzer_ctl_cfg);
 
     // Default states
-    gpio_set_level(FINGERPRINT_LED_PIN, 1); // Turn off fingerprint LED (assuming HIGH=off, LOW=on)
+    gpio_set_level(FINGERPRINT_LED_PIN, 1); // Turn off fingerprint LED
     gpio_set_level(APP_LED_PIN, 1);         // Turn off APP LED
     gpio_set_level(PASSWORD_LED_PIN, 1);    // Turn off password LED
     gpio_set_level(CARD_LED_PIN, 1);        // Turn off card LED
-    gpio_set_level(LOCK_CTL_PIN, 0);        // Lock default closed (LOW=power off)
-    gpio_set_level(BUZZER_CTL_PIN, 1);      // Buzzer default off (HIGH=silent)
+    gpio_set_level(LOCK_CTL_PIN, 0);        // Lock default closed
+    gpio_set_level(BUZZER_CTL_PIN, 1);      // Buzzer default off
 
     ESP_LOGI(TAG, "GPIO initialized successfully");
     return ESP_OK;
@@ -247,12 +247,12 @@ void buzzer_task(void *pvParameters)
             if (message == 1)
             {                                      // Unlock success: long beep 1s + unlock
                 gpio_set_level(BUZZER_CTL_PIN, 0); // Turn on buzzer (LOW=active)
-                gpio_set_level(LOCK_CTL_PIN, 1);   // Power ON electromagnetic lock
+                gpio_set_level(LOCK_CTL_PIN, 1);   // Power on electromagnetic lock
                 ESP_LOGI(TAG, "Buzzer beeping (success) + Lock unlocked");
 
                 vTaskDelay(pdMS_TO_TICKS(1000));   // Keep lock powered 1s
                 gpio_set_level(BUZZER_CTL_PIN, 1); // Turn off buzzer
-                gpio_set_level(LOCK_CTL_PIN, 0);   // Power OFF lock
+                gpio_set_level(LOCK_CTL_PIN, 0);   // Power off lock
                 ESP_LOGI(TAG, "Buzzer stopped + Lock locked");
             }
             else if (message == 0)
