@@ -1,5 +1,5 @@
-#ifndef OLED_H_
-#define OLED_H_
+#ifndef OLED_H
+#define OLED_H
 
 #include "oled_fonts.h"
 #include <driver/i2c_master.h>

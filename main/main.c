@@ -8,6 +8,7 @@
 #include "pn7160_i2c.h"
 #include "oled.h"
 #include "touch.h"
+#include "sleep.h"
 #include "battery.h"
 #include "nvs_custom.h"
 
@@ -87,11 +88,19 @@ void app_main(void)
         ESP_LOGI(TAG, "PN7160 module initialization successful");
     }
 
+    // initializing sleep function
+    if (sleep_initialization() != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Sleep function initialization failed");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Sleep function initialization successful");
+    }
+
     // spiffs_init_and_load_webpage();
     // wifi_init_softap();
     // web_server_start();
-
-    ESP_LOGI(TAG, "Function: %s, File: %s, Line: %d", __func__, __FILE__, __LINE__);
 
     ESP_LOGI(TAG, "smart lock system initialization complete.");
 }

@@ -1,5 +1,5 @@
-#ifndef __TOUCH_DRIVER_H_
-#define __TOUCH_DRIVER_H_
+#ifndef TOUCH_DRIVER_H
+#define TOUCH_DRIVER_H
 
 #include <driver/touch_sens.h>
 #include <freertos/FreeRTOS.h>

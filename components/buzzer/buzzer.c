@@ -245,14 +245,14 @@ void buzzer_task(void *pvParameters)
         {
             ESP_LOGI(TAG, "Buzzer received message: %u (1=success, 0=failure)", message);
             if (message == 1)
-            { // Unlock success: long beep 1s + unlock
-                // gpio_set_level(BUZZER_CTL_PIN, 0); // Turn on buzzer (LOW=active)
-                gpio_set_level(LOCK_CTL_PIN, 1); // Power ON electromagnetic lock
+            {                                      // Unlock success: long beep 1s + unlock
+                gpio_set_level(BUZZER_CTL_PIN, 0); // Turn on buzzer (LOW=active)
+                gpio_set_level(LOCK_CTL_PIN, 1);   // Power ON electromagnetic lock
                 ESP_LOGI(TAG, "Buzzer beeping (success) + Lock unlocked");
 
-                vTaskDelay(pdMS_TO_TICKS(1000)); // Keep lock powered 1s
-                // gpio_set_level(BUZZER_CTL_PIN, 1); // Turn off buzzer
-                gpio_set_level(LOCK_CTL_PIN, 0); // Power OFF lock
+                vTaskDelay(pdMS_TO_TICKS(1000));   // Keep lock powered 1s
+                gpio_set_level(BUZZER_CTL_PIN, 1); // Turn off buzzer
+                gpio_set_level(LOCK_CTL_PIN, 0);   // Power OFF lock
                 ESP_LOGI(TAG, "Buzzer stopped + Lock locked");
             }
             else if (message == 0)
@@ -260,14 +260,14 @@ void buzzer_task(void *pvParameters)
                 // Unlock failure: short beep twice (200ms beep + 100ms pause)
                 ESP_LOGI(TAG, "Buzzer beeping (failure)");
                 // First beep
-                // gpio_set_level(BUZZER_CTL_PIN, 0);
+                gpio_set_level(BUZZER_CTL_PIN, 0);
                 vTaskDelay(pdMS_TO_TICKS(200));
-                // gpio_set_level(BUZZER_CTL_PIN, 1);
+                gpio_set_level(BUZZER_CTL_PIN, 1);
                 vTaskDelay(pdMS_TO_TICKS(100));
                 // Second beep
-                // gpio_set_level(BUZZER_CTL_PIN, 0);
+                gpio_set_level(BUZZER_CTL_PIN, 0);
                 vTaskDelay(pdMS_TO_TICKS(200));
-                // gpio_set_level(BUZZER_CTL_PIN, 1);
+                gpio_set_level(BUZZER_CTL_PIN, 1);
                 ESP_LOGI(TAG, "Buzzer stopped (failure)");
             }
         }

@@ -51,32 +51,8 @@ QueueHandle_t touch_key_queue = NULL; // Touch key event queue
 char g_touch_password[TOUCH_PASSWORD_LEN + 1]; // Stored password
 char g_input_password[TOUCH_PASSWORD_LEN + 1]; // Current input buffer
 uint8_t g_input_len = 0;
-static bool g_touch_wakeup_flag = false;
+bool g_touch_wakeup_flag = false;
 
-static void power_sleep_task(void *arg)
-{
-    while (1)
-    {
-        ESP_LOGI(TAG, "System idle, preparing to sleep...");
-
-        vTaskDelay(pdMS_TO_TICKS(60000));
-        g_touch_wakeup_flag = true;
-
-        esp_light_sleep_start();
-
-        esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-
-        if (cause == ESP_SLEEP_WAKEUP_TOUCHPAD)
-        {
-            ESP_LOGI(TAG, "Wakeup by touch");
-        }
-        else if (cause == ESP_SLEEP_WAKEUP_GPIO)
-        {
-            ESP_LOGI(TAG, "Wakeup by fingerprint GPIO");
-
-        }
-    }
-}
 // Map touch channel ID to corresponding key character
 static char touch_key_from_channel(uint8_t ch)
 {
@@ -227,8 +203,6 @@ static void touch_password_init(void)
     {
         ESP_LOGI(TAG, "Password loaded from NVS");
     }
-
-    xTaskCreate(touch_key_task, "touch_key_task", 4096, NULL, 10, NULL);
 }
 
 // Touch driver initialization entry
@@ -245,11 +219,9 @@ esp_err_t touch_initialization(void)
     touch_channel_handle_t ch[sizeof(touch_keys) / sizeof(touch_keys[0])];
 
     // Create touch controller
-    touch_sensor_sample_config_t sample_cfg[1] = {
-        TOUCH_SENSOR_V2_DEFAULT_SAMPLE_CONFIG(500, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V2)};
+    touch_sensor_sample_config_t sample_cfg[1] = {TOUCH_SENSOR_V2_DEFAULT_SAMPLE_CONFIG(500, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V2)};
 
-    touch_sensor_config_t sens_cfg =
-        TOUCH_SENSOR_DEFAULT_BASIC_CONFIG(1, sample_cfg);
+    touch_sensor_config_t sens_cfg = TOUCH_SENSOR_DEFAULT_BASIC_CONFIG(1, sample_cfg);
 
     ESP_ERROR_CHECK(touch_sensor_new_controller(&sens_cfg, &sens));
 
@@ -271,8 +243,8 @@ esp_err_t touch_initialization(void)
     }
 
     // Configure digital filter
-    touch_sensor_filter_config_t filter =
-        TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
+    touch_sensor_filter_config_t filter = TOUCH_SENSOR_DEFAULT_FILTER_CONFIG();
+
     touch_sensor_config_filter(sens, &filter);
 
     // Perform initial baseline scanning
@@ -297,9 +269,7 @@ esp_err_t touch_initialization(void)
 
     touch_password_init();
 
-    ESP_LOGI(TAG, "Starting power sleep task");
-
-    xTaskCreate(power_sleep_task, "power_sleep_task", 4096, NULL, 10, NULL);
+    xTaskCreate(touch_key_task, "touch_key_task", 4096, NULL, 10, NULL);
 
     return ESP_OK;
 }

@@ -3,8 +3,8 @@
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
-#ifndef DNS_SERVER_H_
-#define DNS_SERVER_H_
+#ifndef DNS_SERVER_H
+#define DNS_SERVER_H
 
 #include <sys/param.h>
 #include <inttypes.h>

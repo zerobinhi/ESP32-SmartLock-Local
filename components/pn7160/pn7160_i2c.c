@@ -18,6 +18,8 @@ uint8_t g_card_count = 0;                  // Number of stored cards
 // uint16_t BytesRead;           // records number of bytes read from PN7160
 // uint8_t pResponseBuffer[512]; // storage for response from PN7160
 
+TaskHandle_t pn7160_task_handle = NULL;
+
 static const char *TAG = "pn7160";
 
 /**
@@ -192,7 +194,7 @@ esp_err_t pn7160_initialization(void)
     ESP_LOGI(TAG, "pn7160 RF discover response: %02x %02x %02x %02x", RF_DISCOVER_RSP[0], RF_DISCOVER_RSP[1], RF_DISCOVER_RSP[2], RF_DISCOVER_RSP[3]);
 
     /* Create pn7160 task */
-    xTaskCreate(pn7160_task, "pn7160_task", 8192, NULL, 10, NULL);
+    xTaskCreate(pn7160_task, "pn7160_task", 8192, NULL, 10, &pn7160_task_handle);
     ESP_LOGI(TAG, "pn7160 task started");
 
     return ESP_OK;
@@ -238,6 +240,7 @@ void pn7160_task(void *arg)
             // 61 03 0f 02 80 00 0a 04 00 04 98 8c b3 a2 01 08 00 01
             if (i2c_master_receive(pn7160_handle, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF), pdMS_TO_TICKS(1000)) == ESP_OK)
             {
+                notify_user_activity();
                 card_count = 1; // Reset card count to 1 by default, will set to 2 if we find two cards in notification
                 ESP_LOGI(TAG, "Card detected");
                 ESP_LOG_BUFFER_HEX(TAG, RF_DISCOVER_NTF, sizeof(RF_DISCOVER_NTF));

@@ -1,5 +1,5 @@
-#ifndef __PN7160_I2C_H__
-#define __PN7160_I2C_H__
+#ifndef PN7160_I2C_H
+#define PN7160_I2C_H
 
 #include <driver/i2c_master.h>
 #include <driver/gpio.h>
@@ -27,5 +27,6 @@ extern void send_operation_result(const char *message, bool success); // send op
 esp_err_t pn7160_initialization();
 uint8_t find_card_id(uint64_t card_id);
 void pn7160_task(void *arg);
+extern void notify_user_activity(void);
 
 #endif
